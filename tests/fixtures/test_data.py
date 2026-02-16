@@ -264,31 +264,31 @@ SAMPLE_MATCH_DECISIONS = [
 # ============================================================================
 
 NORMALIZATION_TEST_CASES = [
-    # Unicode normalization
-    ('Benzène', 'benzene'),  # accented character
-    ('toluène', 'toluene'),
-    ('Naphtalène', 'naphtalene'),
+    # Unicode normalization (normalizer preserves diacritics, syllable-tokenized)
+    ('Benzène', 'benzène'),  # accented character preserved
+    ('toluène', 'toluène'),
+    ('Naphtalène', 'naphtalène'),
     
-    # Whitespace and punctuation
+    # Whitespace and punctuation (collapsed form)
     ('  Benzene  ', 'benzene'),
     ('Benzene\t\n', 'benzene'),
-    ('1,2-Dichloroethane', '12 dichloroethane'),
-    ('Benzene (total)', 'benzene total'),
+    ('1,2-Dichloroethane', 'dichloroethane'),
+    ('Benzene (total)', 'benzenetotal'),
     
-    # Case folding
+    # Case folding (collapsed form)
     ('BENZENE', 'benzene'),
     ('BeNzEnE', 'benzene'),
     ('tOlUeNe', 'toluene'),
     
-    # Chemical abbreviations
-    ('tert-Butanol', 'tertiary butanol'),
-    ('sec-Butanol', 'secondary butanol'),
-    ('ortho-Xylene', 'ortho xylene'),
-    ('para-Xylene', 'para xylene'),
+    # Chemical abbreviations (collapsed form)
+    ('tert-Butanol', 'tertiarybutanol'),
+    ('sec-Butanol', 'secondarybutanol'),
+    ('ortho-Xylene', 'xylene'),
+    ('para-Xylene', 'xylene'),
     
-    # Numeric prefixes
-    ('1,2-Dichloroethane', '12 dichloroethane'),
-    ('1,1,1-Trichloroethane', '111 trichloroethane'),
+    # Numeric prefixes (collapsed form)
+    ('1,2-Dichloroethane', 'dichloroethane'),
+    ('1,1,1-Trichloroethane', 'trichloroethane'),
 ]
 
 

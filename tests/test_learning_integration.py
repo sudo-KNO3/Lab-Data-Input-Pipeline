@@ -43,9 +43,10 @@ class TestSynonymIngestion:
     def test_check_duplicate_returns_true_for_existing(self, sample_synonyms):
         """Known synonym is detected as duplicate."""
         ingestor = SynonymIngestor()
-        # 'benzene' is loaded as normalized form in conftest
+        # conftest now stores normalized form via TextNormalizer
+        norm_text = ingestor.normalizer.normalize("Benzene")
         is_dup = ingestor.check_duplicate(
-            "benzene", "REG153_VOCS_001", sample_synonyms
+            norm_text, "REG153_VOCS_001", sample_synonyms
         )
         assert is_dup is True
 

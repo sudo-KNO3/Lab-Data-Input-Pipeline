@@ -211,66 +211,72 @@ def sample_synonyms(preloaded_analytes: Session) -> Session:
     Add sample synonyms to the preloaded analytes database.
     
     Includes exact names, common variants, and lab spellings.
+    synonym_norm values are computed via TextNormalizer to match
+    the exact normalization used by ExactMatcher/FuzzyMatcher.
     """
-    synonyms_data = [
+    normalizer = TextNormalizer()
+    
+    # (analyte_id, synonym_raw, synonym_type, confidence)
+    # synonym_norm is computed dynamically via normalizer.normalize()
+    synonyms_raw = [
         # Benzene synonyms
-        ('REG153_VOCS_001', 'Benzene', 'benzene', SynonymType.IUPAC, 1.0),
-        ('REG153_VOCS_001', 'benzol', 'benzol', SynonymType.COMMON, 0.95),
-        ('REG153_VOCS_001', 'Benzene', 'benzene', SynonymType.LAB_VARIANT, 1.0),
-        ('REG153_VOCS_001', '71-43-2', '71432', SynonymType.COMMON, 1.0),
+        ('REG153_VOCS_001', 'Benzene', SynonymType.IUPAC, 1.0),
+        ('REG153_VOCS_001', 'benzol', SynonymType.COMMON, 0.95),
+        ('REG153_VOCS_001', '71-43-2', SynonymType.COMMON, 1.0),
         
         # Toluene synonyms
-        ('REG153_VOCS_002', 'Toluene', 'toluene', SynonymType.IUPAC, 1.0),
-        ('REG153_VOCS_002', 'methylbenzene', 'methylbenzene', SynonymType.COMMON, 0.95),
-        ('REG153_VOCS_002', 'toluol', 'toluol', SynonymType.COMMON, 0.90),
+        ('REG153_VOCS_002', 'Toluene', SynonymType.IUPAC, 1.0),
+        ('REG153_VOCS_002', 'methylbenzene', SynonymType.COMMON, 0.95),
+        ('REG153_VOCS_002', 'toluol', SynonymType.COMMON, 0.90),
         
         # Ethylbenzene synonyms
-        ('REG153_VOCS_003', 'Ethylbenzene', 'ethylbenzene', SynonymType.IUPAC, 1.0),
-        ('REG153_VOCS_003', 'ethyl benzene', 'ethyl benzene', SynonymType.LAB_VARIANT, 0.98),
+        ('REG153_VOCS_003', 'Ethylbenzene', SynonymType.IUPAC, 1.0),
+        ('REG153_VOCS_003', 'ethyl benzene', SynonymType.LAB_VARIANT, 0.98),
         
         # Xylenes synonyms
-        ('REG153_VOCS_004', 'Xylenes (total)', 'xylenes total', SynonymType.IUPAC, 1.0),
-        ('REG153_VOCS_004', 'Total Xylenes', 'total xylenes', SynonymType.LAB_VARIANT, 1.0),
-        ('REG153_VOCS_004', 'Xylenes, total', 'xylenes total', SynonymType.LAB_VARIANT, 1.0),
+        ('REG153_VOCS_004', 'Xylenes (total)', SynonymType.IUPAC, 1.0),
+        ('REG153_VOCS_004', 'Total Xylenes', SynonymType.LAB_VARIANT, 1.0),
+        ('REG153_VOCS_004', 'Xylenes, total', SynonymType.LAB_VARIANT, 1.0),
         
         # PHC synonyms
-        ('REG153_PHCS_001', 'PHC F1', 'phc f1', SynonymType.FRACTION_NOTATION, 1.0),
-        ('REG153_PHCS_001', 'F1', 'f1', SynonymType.ABBREVIATION, 1.0),
-        ('REG153_PHCS_001', 'Fraction 1', 'fraction 1', SynonymType.COMMON, 1.0),
-        ('REG153_PHCS_001', 'C6-C10', 'c6c10', SynonymType.FRACTION_NOTATION, 1.0),
+        ('REG153_PHCS_001', 'PHC F1', SynonymType.FRACTION_NOTATION, 1.0),
+        ('REG153_PHCS_001', 'F1', SynonymType.ABBREVIATION, 1.0),
+        ('REG153_PHCS_001', 'Fraction 1', SynonymType.COMMON, 1.0),
+        ('REG153_PHCS_001', 'C6-C10', SynonymType.FRACTION_NOTATION, 1.0),
         
-        ('REG153_PHCS_002', 'PHC F2', 'phc f2', SynonymType.FRACTION_NOTATION, 1.0),
-        ('REG153_PHCS_002', 'F2', 'f2', SynonymType.ABBREVIATION, 1.0),
-        ('REG153_PHCS_002', 'F2 (C10-C16)', 'f2 c10c16', SynonymType.FRACTION_NOTATION, 1.0),
+        ('REG153_PHCS_002', 'PHC F2', SynonymType.FRACTION_NOTATION, 1.0),
+        ('REG153_PHCS_002', 'F2', SynonymType.ABBREVIATION, 1.0),
+        ('REG153_PHCS_002', 'F2 (C10-C16)', SynonymType.FRACTION_NOTATION, 1.0),
         
         # Metals synonyms
-        ('REG153_METALS_001', 'Arsenic', 'arsenic', SynonymType.IUPAC, 1.0),
-        ('REG153_METALS_001', 'As', 'as', SynonymType.ABBREVIATION, 1.0),
-        ('REG153_METALS_001', 'Arsenic, total', 'arsenic total', SynonymType.LAB_VARIANT, 1.0),
+        ('REG153_METALS_001', 'Arsenic', SynonymType.IUPAC, 1.0),
+        ('REG153_METALS_001', 'As', SynonymType.ABBREVIATION, 1.0),
+        ('REG153_METALS_001', 'Arsenic, total', SynonymType.LAB_VARIANT, 1.0),
         
-        ('REG153_METALS_002', 'Lead', 'lead', SynonymType.IUPAC, 1.0),
-        ('REG153_METALS_002', 'Pb', 'pb', SynonymType.ABBREVIATION, 1.0),
+        ('REG153_METALS_002', 'Lead', SynonymType.IUPAC, 1.0),
+        ('REG153_METALS_002', 'Pb', SynonymType.ABBREVIATION, 1.0),
         
-        ('REG153_METALS_003', 'Chromium', 'chromium', SynonymType.IUPAC, 1.0),
-        ('REG153_METALS_003', 'Cr', 'cr', SynonymType.ABBREVIATION, 1.0),
-        ('REG153_METALS_003', 'Chrome', 'chrome', SynonymType.COMMON, 0.85),
+        ('REG153_METALS_003', 'Chromium', SynonymType.IUPAC, 1.0),
+        ('REG153_METALS_003', 'Cr', SynonymType.ABBREVIATION, 1.0),
+        ('REG153_METALS_003', 'Chrome', SynonymType.COMMON, 0.85),
         
-        ('REG153_METALS_004', 'Chromium VI', 'chromium vi', SynonymType.IUPAC, 1.0),
-        ('REG153_METALS_004', 'Chromium (VI)', 'chromium vi', SynonymType.LAB_VARIANT, 1.0),
-        ('REG153_METALS_004', 'Hexavalent Chromium', 'hexavalent chromium', SynonymType.COMMON, 1.0),
-        ('REG153_METALS_004', 'Cr(VI)', 'crvi', SynonymType.ABBREVIATION, 1.0),
+        ('REG153_METALS_004', 'Chromium VI', SynonymType.IUPAC, 1.0),
+        ('REG153_METALS_004', 'Chromium (VI)', SynonymType.LAB_VARIANT, 1.0),
+        ('REG153_METALS_004', 'Hexavalent Chromium', SynonymType.COMMON, 1.0),
+        ('REG153_METALS_004', 'Cr(VI)', SynonymType.ABBREVIATION, 1.0),
         
         # PAHs synonyms
-        ('REG153_PAHS_001', 'Naphthalene', 'naphthalene', SynonymType.IUPAC, 1.0),
-        ('REG153_PAHS_001', 'Napthalene', 'napthalene', SynonymType.LAB_VARIANT, 0.95),
+        ('REG153_PAHS_001', 'Naphthalene', SynonymType.IUPAC, 1.0),
+        ('REG153_PAHS_001', 'Napthalene', SynonymType.LAB_VARIANT, 0.95),
         
-        ('REG153_PAHS_002', 'Benzo(a)pyrene', 'benzoapyrene', SynonymType.IUPAC, 1.0),
-        ('REG153_PAHS_002', 'BaP', 'bap', SynonymType.ABBREVIATION, 0.95),
-        ('REG153_PAHS_002', 'Benzo[a]pyrene', 'benzoapyrene', SynonymType.LAB_VARIANT, 1.0),
+        ('REG153_PAHS_002', 'Benzo(a)pyrene', SynonymType.IUPAC, 1.0),
+        ('REG153_PAHS_002', 'BaP', SynonymType.ABBREVIATION, 0.95),
+        ('REG153_PAHS_002', 'Benzo[a]pyrene', SynonymType.LAB_VARIANT, 1.0),
     ]
     
-    # Insert synonyms
-    for analyte_id, syn_raw, syn_norm, syn_type, confidence in synonyms_data:
+    # Insert synonyms with computed synonym_norm
+    for analyte_id, syn_raw, syn_type, confidence in synonyms_raw:
+        syn_norm = normalizer.normalize(syn_raw)
         crud.insert_synonym(
             preloaded_analytes,
             analyte_id=analyte_id,

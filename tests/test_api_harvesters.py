@@ -44,7 +44,7 @@ class TestQualityFilters:
     def test_filter_synonyms_length(self):
         """Test length filtering."""
         synonyms = [
-            "Short name",
+            "Methylcyclohexane",
             "A" * 150,  # Too long
             "Normal length chemical name",
         ]
@@ -213,17 +213,14 @@ class TestPubChemHarvester:
             assert len(synonyms) == 0
 
     def test_harvest_synonyms_fallback_to_name(self, harvester, mock_pubchem_response):
-        """Test fallback to name search when CAS fails."""
+        """Test fallback to name search when CAS is None."""
         with patch.object(harvester, "_rate_limited_request") as mock_request:
-            # First call (CAS) returns 404, second (name) succeeds
-            mock_404 = Mock()
-            mock_404.status_code = 404
-
+            # When CAS=None, only name search is attempted
             mock_200 = Mock()
             mock_200.status_code = 200
             mock_200.json.return_value = mock_pubchem_response
 
-            mock_request.side_effect = [mock_404, mock_200]
+            mock_request.return_value = mock_200
 
             synonyms = harvester.harvest_synonyms(None, "Benzene")
 

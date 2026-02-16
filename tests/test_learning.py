@@ -97,7 +97,9 @@ def test_ingest_validated_synonym_new(db_session, synonym_ingestor):
         raw_text="Benzol",
         analyte_id="REG153_001",
         db_session=db_session,
-        confidence=1.0
+        confidence=1.0,
+        cascade_confirmed=True,
+        cascade_margin=1.0,
     )
     
     assert result is True
@@ -116,7 +118,9 @@ def test_ingest_validated_synonym_duplicate(db_session, synonym_ingestor):
     result1 = synonym_ingestor.ingest_validated_synonym(
         raw_text="Benzol",
         analyte_id="REG153_001",
-        db_session=db_session
+        db_session=db_session,
+        cascade_confirmed=True,
+        cascade_margin=1.0,
     )
     assert result1 is True
     
@@ -124,7 +128,9 @@ def test_ingest_validated_synonym_duplicate(db_session, synonym_ingestor):
     result2 = synonym_ingestor.ingest_validated_synonym(
         raw_text="Benzol",
         analyte_id="REG153_001",
-        db_session=db_session
+        db_session=db_session,
+        cascade_confirmed=True,
+        cascade_margin=1.0,
     )
     assert result2 is False
     
@@ -153,7 +159,9 @@ def test_check_duplicate(db_session, synonym_ingestor):
     synonym_ingestor.ingest_validated_synonym(
         raw_text="Benzol",
         analyte_id="REG153_001",
-        db_session=db_session
+        db_session=db_session,
+        cascade_confirmed=True,
+        cascade_margin=1.0,
     )
     
     # Now there is a duplicate (normalized form matches)
@@ -170,7 +178,11 @@ def test_bulk_ingest(db_session, synonym_ingestor):
         ("Benzol", "REG153_001"),  # Duplicate
     ]
     
-    stats = synonym_ingestor.bulk_ingest(synonym_list, db_session)
+    stats = synonym_ingestor.bulk_ingest(
+        synonym_list, db_session,
+        cascade_confirmed=True,
+        cascade_margin=1.0,
+    )
     
     assert stats['added'] == 3
     assert stats['duplicates'] == 1
@@ -184,13 +196,17 @@ def test_get_ingestion_stats(db_session, synonym_ingestor):
         raw_text="Benzol",
         analyte_id="REG153_001",
         db_session=db_session,
-        synonym_type=SynonymType.COMMON
+        synonym_type=SynonymType.COMMON,
+        cascade_confirmed=True,
+        cascade_margin=1.0,
     )
     synonym_ingestor.ingest_validated_synonym(
         raw_text="Methylbenzene",
         analyte_id="REG153_002",
         db_session=db_session,
-        synonym_type=SynonymType.LAB_VARIANT
+        synonym_type=SynonymType.LAB_VARIANT,
+        cascade_confirmed=True,
+        cascade_margin=1.0,
     )
     
     stats = synonym_ingestor.get_ingestion_stats(db_session)

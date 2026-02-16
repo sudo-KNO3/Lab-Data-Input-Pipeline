@@ -18,6 +18,7 @@ from src.database.models import (
     Analyte, Synonym, LabVariant, MatchDecision,
     AnalyteType, SynonymType, ValidationConfidence,
 )
+from src.normalization.text_normalizer import TextNormalizer
 from tests.fixtures.test_data import CRUD_TEST_ANALYTE, CRUD_TEST_SYNONYM
 
 
@@ -169,8 +170,8 @@ class TestSynonymCRUD:
             synonym_raw="Test Synonym",
             synonym_norm="test synonym",
             synonym_type=SynonymType.COMMON,
-            confidence_score=0.95,
-            source="test",
+            confidence=0.95,
+            harvest_source="test",
         )
         
         preloaded_analytes.commit()
@@ -178,11 +179,11 @@ class TestSynonymCRUD:
         assert synonym.analyte_id == "REG153_VOCS_001"
         assert synonym.synonym_raw == "Test Synonym"
         assert synonym.synonym_norm == "test synonym"
-        assert synonym.confidence_score == 0.95
+        assert synonym.confidence == 0.95
     
     def test_get_synonyms_by_analyte(self, sample_synonyms):
         """Test retrieving synonyms for an analyte."""
-        synonyms = crud.get_synonyms_by_analyte(sample_synonyms, "REG153_VOCS_001")
+        synonyms = crud.get_synonyms_for_analyte(sample_synonyms, "REG153_VOCS_001")
         
         assert len(synonyms) > 0
         for syn in synonyms:
@@ -190,10 +191,12 @@ class TestSynonymCRUD:
     
     def test_search_synonym(self, sample_synonyms):
         """Test searching for a synonym."""
-        synonym = crud.search_synonym(sample_synonyms, "benzene")
+        normalizer = TextNormalizer()
+        norm_text = normalizer.normalize("benzene")
+        results = crud.query_by_normalized_synonym(sample_synonyms, norm_text)
         
-        assert synonym is not None
-        assert synonym.analyte_id == "REG153_VOCS_001"
+        assert len(results) > 0
+        assert results[0].analyte_id == "REG153_VOCS_001"
     
     def test_bulk_insert_synonyms(self, preloaded_analytes):
         """Test bulk synonym insertion."""
@@ -203,16 +206,16 @@ class TestSynonymCRUD:
                 'synonym_raw': 'Syn1',
                 'synonym_norm': 'syn1',
                 'synonym_type': SynonymType.COMMON,
-                'confidence_score': 0.9,
-                'source': 'test',
+                'confidence': 0.9,
+                'harvest_source': 'test',
             },
             {
                 'analyte_id': 'REG153_VOCS_001',
                 'synonym_raw': 'Syn2',
                 'synonym_norm': 'syn2',
                 'synonym_type': SynonymType.COMMON,
-                'confidence_score': 0.85,
-                'source': 'test',
+                'confidence': 0.85,
+                'harvest_source': 'test',
             },
         ]
         
@@ -222,7 +225,7 @@ class TestSynonymCRUD:
         preloaded_analytes.commit()
         
         # Verify bulk insertion
-        synonyms = crud.get_synonyms_by_analyte(preloaded_analytes, "REG153_VOCS_001")
+        synonyms = crud.get_synonyms_for_analyte(preloaded_analytes, "REG153_VOCS_001")
         syn_raws = [s.synonym_raw for s in synonyms]
         assert 'Syn1' in syn_raws
         assert 'Syn2' in syn_raws
@@ -230,8 +233,11 @@ class TestSynonymCRUD:
     def test_delete_synonym(self, sample_synonyms):
         """Test synonym deletion."""
         # Get a synonym
-        synonym = crud.search_synonym(sample_synonyms, "benzene")
-        assert synonym is not None
+        normalizer = TextNormalizer()
+        norm_text = normalizer.normalize("benzene")
+        results = crud.query_by_normalized_synonym(sample_synonyms, norm_text)
+        assert len(results) > 0
+        synonym = results[0]
         
         syn_id = synonym.id
         
@@ -255,16 +261,16 @@ class TestLabVariantCRUD:
         """Test lab variant insertion."""
         variant = crud.insert_lab_variant(
             preloaded_analytes,
-            lab_variant="Benzene (test lab)",
-            analyte_id="REG153_VOCS_001",
+            observed_text="Benzene (test lab)",
+            validated_match_id="REG153_VOCS_001",
             validation_confidence=ValidationConfidence.HIGH,
-            lab_name="Test Lab",
+            lab_vendor="Test Lab",
         )
         
         preloaded_analytes.commit()
         
-        assert variant.lab_variant == "Benzene (test lab)"
-        assert variant.analyte_id == "REG153_VOCS_001"
+        assert variant.observed_text == "Benzene (test lab)"
+        assert variant.validated_match_id == "REG153_VOCS_001"
         assert variant.validation_confidence == ValidationConfidence.HIGH
     
     def test_get_lab_variants_by_analyte(self, preloaded_analytes):
@@ -272,33 +278,37 @@ class TestLabVariantCRUD:
         # Insert a variant first
         crud.insert_lab_variant(
             preloaded_analytes,
-            lab_variant="Benzene (test)",
-            analyte_id="REG153_VOCS_001",
+            observed_text="Benzene (test)",
+            validated_match_id="REG153_VOCS_001",
             validation_confidence=ValidationConfidence.HIGH,
         )
         preloaded_analytes.commit()
         
-        variants = crud.get_lab_variants_by_analyte(preloaded_analytes, "REG153_VOCS_001")
+        variants = preloaded_analytes.query(LabVariant).filter(
+            LabVariant.validated_match_id == "REG153_VOCS_001"
+        ).all()
         
         assert len(variants) > 0
         for variant in variants:
-            assert variant.analyte_id == "REG153_VOCS_001"
+            assert variant.validated_match_id == "REG153_VOCS_001"
     
     def test_search_lab_variant(self, preloaded_analytes):
         """Test searching for a lab variant."""
         # Insert a variant
         crud.insert_lab_variant(
             preloaded_analytes,
-            lab_variant="Benzene Test",
-            analyte_id="REG153_VOCS_001",
+            observed_text="Benzene Test",
+            validated_match_id="REG153_VOCS_001",
             validation_confidence=ValidationConfidence.HIGH,
         )
         preloaded_analytes.commit()
         
-        variant = crud.search_lab_variant(preloaded_analytes, "Benzene Test")
+        variant = preloaded_analytes.query(LabVariant).filter(
+            LabVariant.observed_text == "Benzene Test"
+        ).first()
         
         assert variant is not None
-        assert variant.lab_variant == "Benzene Test"
+        assert variant.observed_text == "Benzene Test"
 
 
 # ============================================================================
@@ -310,84 +320,106 @@ class TestMatchDecisionCRUD:
     
     def test_insert_match_decision(self, preloaded_analytes):
         """Test match decision insertion."""
-        decision = crud.insert_match_decision(
+        decision = crud.log_match_decision(
             preloaded_analytes,
-            lab_variant="Benzene Test",
-            analyte_id="REG153_VOCS_001",
-            confidence=0.95,
-            method="exact",
-            validated=True,
-            reviewer="test_user",
+            input_text="Benzene Test",
+            matched_analyte_id="REG153_VOCS_001",
+            match_method="exact",
+            confidence_score=0.95,
+            top_k_candidates=[],
+            signals_used={},
+            corpus_snapshot_hash="test",
+            model_hash="test",
+            human_validated=True,
         )
         
         preloaded_analytes.commit()
         
-        assert decision.lab_variant == "Benzene Test"
-        assert decision.analyte_id == "REG153_VOCS_001"
-        assert decision.confidence == 0.95
-        assert decision.validated is True
+        assert decision.input_text == "Benzene Test"
+        assert decision.matched_analyte_id == "REG153_VOCS_001"
+        assert decision.confidence_score == 0.95
+        assert decision.human_validated is True
     
     def test_get_validated_decisions(self, preloaded_analytes):
         """Test retrieving validated decisions."""
         # Insert some decisions
-        crud.insert_match_decision(
+        crud.log_match_decision(
             preloaded_analytes,
-            lab_variant="Benzene Test 1",
-            analyte_id="REG153_VOCS_001",
-            confidence=0.95,
-            method="exact",
-            validated=True,
+            input_text="Benzene Test 1",
+            matched_analyte_id="REG153_VOCS_001",
+            match_method="exact",
+            confidence_score=0.95,
+            top_k_candidates=[],
+            signals_used={},
+            corpus_snapshot_hash="test",
+            model_hash="test",
+            human_validated=True,
         )
-        crud.insert_match_decision(
+        crud.log_match_decision(
             preloaded_analytes,
-            lab_variant="Benzene Test 2",
-            analyte_id="REG153_VOCS_001",
-            confidence=0.85,
-            method="fuzzy",
-            validated=False,
+            input_text="Benzene Test 2",
+            matched_analyte_id="REG153_VOCS_001",
+            match_method="fuzzy",
+            confidence_score=0.85,
+            top_k_candidates=[],
+            signals_used={},
+            corpus_snapshot_hash="test",
+            model_hash="test",
+            human_validated=False,
         )
         preloaded_analytes.commit()
         
-        validated = crud.get_validated_decisions(preloaded_analytes)
+        validated = crud.get_validated_decisions_since(
+            preloaded_analytes, datetime.min
+        )
         
         assert len(validated) > 0
         for decision in validated:
-            assert decision.validated is True
+            assert decision.human_validated is True
     
     def test_get_decisions_by_analyte(self, preloaded_analytes):
         """Test retrieving decisions for an analyte."""
-        crud.insert_match_decision(
+        crud.log_match_decision(
             preloaded_analytes,
-            lab_variant="Benzene Test",
-            analyte_id="REG153_VOCS_001",
-            confidence=0.95,
-            method="exact",
-            validated=True,
+            input_text="Benzene Test",
+            matched_analyte_id="REG153_VOCS_001",
+            match_method="exact",
+            confidence_score=0.95,
+            top_k_candidates=[],
+            signals_used={},
+            corpus_snapshot_hash="test",
+            model_hash="test",
+            human_validated=True,
         )
         preloaded_analytes.commit()
         
-        decisions = crud.get_match_decisions_by_analyte(preloaded_analytes, "REG153_VOCS_001")
+        decisions = preloaded_analytes.query(MatchDecision).filter(
+            MatchDecision.matched_analyte_id == "REG153_VOCS_001"
+        ).all()
         
         assert len(decisions) > 0
         for decision in decisions:
-            assert decision.analyte_id == "REG153_VOCS_001"
+            assert decision.matched_analyte_id == "REG153_VOCS_001"
     
     def test_update_match_decision_validation(self, preloaded_analytes):
         """Test updating a match decision validation status."""
-        decision = crud.insert_match_decision(
+        decision = crud.log_match_decision(
             preloaded_analytes,
-            lab_variant="Benzene Test",
-            analyte_id="REG153_VOCS_001",
-            confidence=0.85,
-            method="fuzzy",
-            validated=False,
+            input_text="Benzene Test",
+            matched_analyte_id="REG153_VOCS_001",
+            match_method="fuzzy",
+            confidence_score=0.85,
+            top_k_candidates=[],
+            signals_used={},
+            corpus_snapshot_hash="test",
+            model_hash="test",
+            human_validated=False,
         )
         preloaded_analytes.commit()
         
         # Update validation
-        decision.validated = True
-        decision.reviewer = "test_reviewer"
-        decision.review_date = datetime.utcnow()
+        decision.human_validated = True
+        decision.validation_notes = "verified by test_reviewer"
         preloaded_analytes.commit()
         
         # Verify update
@@ -395,8 +427,8 @@ class TestMatchDecisionCRUD:
             MatchDecision.id == decision.id
         ).first()
         
-        assert updated.validated is True
-        assert updated.reviewer == "test_reviewer"
+        assert updated.human_validated is True
+        assert updated.validation_notes == "verified by test_reviewer"
 
 
 # ============================================================================
@@ -435,8 +467,8 @@ class TestBulkOperations:
                 'synonym_raw': f'Bulk Synonym {i}',
                 'synonym_norm': f'bulk synonym {i}',
                 'synonym_type': SynonymType.COMMON,
-                'confidence_score': 0.9,
-                'source': 'bulk_test',
+                'confidence': 0.9,
+                'harvest_source': 'bulk_test',
             }
             for i in range(20)
         ]
@@ -447,7 +479,7 @@ class TestBulkOperations:
         preloaded_analytes.commit()
         
         # Verify count
-        synonyms = crud.get_synonyms_by_analyte(preloaded_analytes, "REG153_VOCS_001")
+        synonyms = crud.get_synonyms_for_analyte(preloaded_analytes, "REG153_VOCS_001")
         bulk_synonyms = [s for s in synonyms if 'Bulk Synonym' in s.synonym_raw]
         assert len(bulk_synonyms) == 20
     
@@ -530,8 +562,8 @@ class TestTransactions:
             synonym_raw="Cascade Synonym",
             synonym_norm="cascade synonym",
             synonym_type=SynonymType.COMMON,
-            confidence_score=0.9,
-            source="test",
+            confidence=0.9,
+            harvest_source="test",
         )
         
         test_db_session.commit()
@@ -542,7 +574,10 @@ class TestTransactions:
         
         # Verify both are deleted
         assert crud.get_analyte_by_id(test_db_session, "CASCADE_001") is None
-        assert crud.search_synonym(test_db_session, "cascade synonym") is None
+        normalizer = TextNormalizer()
+        norm_text = normalizer.normalize("cascade synonym")
+        results = crud.query_by_normalized_synonym(test_db_session, norm_text)
+        assert len(results) == 0
 
 
 # ============================================================================
@@ -554,7 +589,9 @@ class TestQueryFilters:
     
     def test_filter_by_chemical_group(self, preloaded_analytes):
         """Test filtering analytes by chemical group."""
-        vocs = crud.get_analytes_by_group(preloaded_analytes, "VOCs")
+        vocs = preloaded_analytes.query(Analyte).filter(
+            Analyte.chemical_group == "VOCs"
+        ).all()
         
         assert len(vocs) > 0
         for analyte in vocs:
@@ -562,10 +599,9 @@ class TestQueryFilters:
     
     def test_filter_by_analyte_type(self, preloaded_analytes):
         """Test filtering by analyte type."""
-        single_substances = crud.get_analytes_by_type(
-            preloaded_analytes,
-            AnalyteType.SINGLE_SUBSTANCE
-        )
+        single_substances = preloaded_analytes.query(Analyte).filter(
+            Analyte.analyte_type == AnalyteType.SINGLE_SUBSTANCE
+        ).all()
         
         assert len(single_substances) > 0
         for analyte in single_substances:
@@ -573,7 +609,7 @@ class TestQueryFilters:
     
     def test_search_analyte_by_name(self, preloaded_analytes):
         """Test searching analytes by name."""
-        results = crud.search_analytes_by_name(preloaded_analytes, "Benzene")
+        result = crud.get_analyte_by_name(preloaded_analytes, "Benzene")
         
-        assert len(results) > 0
-        assert any("Benzene" in a.preferred_name for a in results)
+        assert result is not None
+        assert "Benzene" in result.preferred_name

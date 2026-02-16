@@ -20,8 +20,8 @@ from .models import (
     LabVariant,
     LabVariantConfirmation,
     MatchDecision,
-    EmbeddingMetadata,
-    ApiHarvestMetadata,
+    EmbeddingsMetadata as EmbeddingMetadata,
+    APIHarvestMetadata as ApiHarvestMetadata,
     SnapshotRegistry,
 )
 

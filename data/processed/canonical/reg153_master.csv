@@ -1,0 +1,126 @@
+Analyte_ID,Preferred_Name,Analyte_Type,CAS_Number,Group_Code,Table_Number,Chemical_Group
+REG153_METALS_001,Antimony,single_substance,,METAL,1,Metals
+REG153_METALS_002,Arsenic,single_substance,,METAL,1,Metals
+REG153_METALS_003,Barium,single_substance,,METAL,1,Metals
+REG153_METALS_004,Beryllium,single_substance,,METAL,1,Metals
+REG153_METALS_005,Boron (hot water soluble),single_substance,,METAL,1,Metals
+REG153_METALS_006,Boron (total),single_substance,,METAL,1,Metals
+REG153_METALS_007,Cadmium,single_substance,,METAL,1,Metals
+REG153_METALS_008,Chromium (total),single_substance,,METAL,1,Metals
+REG153_METALS_009,Chromium VI,single_substance,,METAL,1,Metals
+REG153_METALS_010,Cobalt,single_substance,,METAL,1,Metals
+REG153_METALS_011,Copper,single_substance,,METAL,1,Metals
+REG153_METALS_012,Lead,single_substance,,METAL,1,Metals
+REG153_METALS_013,Mercury,single_substance,,METAL,1,Metals
+REG153_METALS_014,Molybdenum,single_substance,,METAL,1,Metals
+REG153_METALS_015,Nickel,single_substance,,METAL,1,Metals
+REG153_METALS_016,Selenium,single_substance,,METAL,1,Metals
+REG153_METALS_017,Silver,single_substance,,METAL,1,Metals
+REG153_METALS_018,Thallium,single_substance,,METAL,1,Metals
+REG153_METALS_019,Uranium,single_substance,,METAL,1,Metals
+REG153_METALS_020,Vanadium,single_substance,,METAL,1,Metals
+REG153_METALS_021,Zinc,single_substance,,METAL,1,Metals
+REG153_METALS_022,Methyl mercury,single_substance,,METAL,1,Metals
+REG153_OCS_001,Aldrin,single_substance,,OC,1,OCs
+REG153_OCS_002,Chlordane,single_substance,,OC,1,OCs
+REG153_OCS_003,DDD,single_substance,,OC,1,OCs
+REG153_OCS_004,DDE,single_substance,,OC,1,OCs
+REG153_OCS_005,DDT,single_substance,,OC,1,OCs
+REG153_OCS_006,Dieldrin,single_substance,,OC,1,OCs
+REG153_OCS_007,Endosulfan,single_substance,,OC,1,OCs
+REG153_OCS_008,Endrin,single_substance,,OC,1,OCs
+REG153_OCS_009,Heptachlor,single_substance,,OC,1,OCs
+REG153_OCS_010,Heptachlor epoxide,single_substance,,OC,1,OCs
+REG153_OCS_011,Hexachlorobenzene,single_substance,,OC,1,OCs
+REG153_OCS_012,Hexachlorobutadiene,single_substance,,OC,1,OCs
+REG153_OCS_013,Hexachlorocyclohexane gamma-,single_substance,,OC,1,OCs
+REG153_OCS_014,Hexachloroethane,single_substance,,OC,1,OCs
+REG153_OCS_015,Methoxychlor,single_substance,,OC,1,OCs
+REG153_PAHS_001,Acenaphthene,single_substance,,PAH,1,PAHs
+REG153_PAHS_002,Acenaphthylene,single_substance,,PAH,1,PAHs
+REG153_PAHS_003,Anthracene,single_substance,,PAH,1,PAHs
+REG153_PAHS_004,Benz[a]anthracene,single_substance,,PAH,1,PAHs
+REG153_PAHS_005,Benzo[a]pyrene,single_substance,,PAH,1,PAHs
+REG153_PAHS_006,Benzo[b]fluoranthene,single_substance,,PAH,1,PAHs
+REG153_PAHS_007,"Benzo[g,h,i]perylene",single_substance,,PAH,1,PAHs
+REG153_PAHS_008,Benzo[k]fluoranthene,single_substance,,PAH,1,PAHs
+REG153_PAHS_009,Chrysene,single_substance,,PAH,1,PAHs
+REG153_PAHS_010,"Dibenz[a,h]anthracene",single_substance,,PAH,1,PAHs
+REG153_PAHS_011,Fluoranthene,single_substance,,PAH,1,PAHs
+REG153_PAHS_012,Fluorene,single_substance,,PAH,1,PAHs
+REG153_PAHS_013,"Indeno[1,2,3-cd]pyrene",single_substance,,PAH,1,PAHs
+REG153_PAHS_014,Methylnaphthalene 1-,single_substance,,PAH,1,PAHs
+REG153_PAHS_015,Methylnaphthalene 2-,single_substance,,PAH,1,PAHs
+REG153_PAHS_016,Methylnaphthalene 2-(1-),single_substance,,PAH,1,PAHs
+REG153_PAHS_017,Naphthalene,single_substance,,PAH,1,PAHs
+REG153_PAHS_018,Phenanthrene,single_substance,,PAH,1,PAHs
+REG153_PAHS_019,Pyrene,single_substance,,PAH,1,PAHs
+REG153_ABNS_001,"Biphenyl 1,1'-",single_substance,,ABN,1,ABNs
+REG153_ABNS_002,Bis(2-chloroethyl)ether,single_substance,,ABN,1,ABNs
+REG153_ABNS_003,Bis(2-chloroisopropyl)ether,single_substance,,ABN,1,ABNs
+REG153_ABNS_004,Bis(2-ethylhexyl)phthalate,single_substance,,ABN,1,ABNs
+REG153_ABNS_005,Chloroaniline p-,single_substance,,ABN,1,ABNs
+REG153_ABNS_006,"Dichlorobenzidine 3,3'-",single_substance,,ABN,1,ABNs
+REG153_ABNS_007,Diethylphthalate,single_substance,,ABN,1,ABNs
+REG153_ABNS_008,"Dimethylphenol 2,4-",single_substance,,ABN,1,ABNs
+REG153_ABNS_009,Dimethylphthalate,single_substance,,ABN,1,ABNs
+REG153_ABNS_010,"Dinitrophenol 2,4-",single_substance,,ABN,1,ABNs
+REG153_ABNS_011,"Dinitrotoluene 2,4- & 2,6-",single_substance,,ABN,1,ABNs
+REG153_ABNS_012,Phenol,single_substance,,ABN,1,ABNs
+REG153_ABNS_013,"Trichlorobenzene 1,2,4-",single_substance,,ABN,1,ABNs
+REG153_CPS_001,Chlorophenol 2-,single_substance,,CP,1,CPs
+REG153_CPS_002,"Dichlorophenol 2,4-",single_substance,,CP,1,CPs
+REG153_CPS_003,Pentachlorophenol,single_substance,,CP,1,CPs
+REG153_CPS_004,"Trichlorophenol 2,4,5-",single_substance,,CP,1,CPs
+REG153_CPS_005,"Trichlorophenol 2,4,6-",single_substance,,CP,1,CPs
+REG153_PCBS_001,Polychlorinated biphenyls (total),suite,,PCB,1,PCBs
+REG153_PHCS_001,Petroleum Hydrocarbons F1,fraction_or_group,,PHC_F1,1,PHCs
+REG153_PHCS_002,Petroleum Hydrocarbons F1 Less BTEX,fraction_or_group,,PHC_F1,1,PHCs
+REG153_PHCS_003,Petroleum Hydrocarbons F2,fraction_or_group,,PHC_F2,1,PHCs
+REG153_PHCS_004,Petroleum Hydrocarbons F2 Less Naphthalene,fraction_or_group,,PHC_F2,1,PHCs
+REG153_PHCS_005,Petroleum Hydrocarbons F3,fraction_or_group,,PHC_F3,1,PHCs
+REG153_PHCS_006,Petroleum Hydrocarbons F3 less PAHs,fraction_or_group,,PHC_F3,1,PHCs
+REG153_PHCS_007,Petroleum Hydrocarbons F4,fraction_or_group,,PHC_F4,1,PHCs
+REG153_PHCS_008,Petroleum Hydrocarbons F4 Gravimetric,fraction_or_group,,PHC_F4,1,PHCs
+REG153_VOCS_001,Acetone,single_substance,,VOC,1,VOCs
+REG153_VOCS_002,Benzene,single_substance,,BTEX,1,VOCs
+REG153_VOCS_003,Bromodichloromethane,single_substance,,VOC,1,VOCs
+REG153_VOCS_004,Bromoform,single_substance,,VOC,1,VOCs
+REG153_VOCS_005,Bromomethane,single_substance,,VOC,1,VOCs
+REG153_VOCS_006,Carbon tetrachloride,single_substance,,VOC,1,VOCs
+REG153_VOCS_007,Chlorobenzene,single_substance,,VOC,1,VOCs
+REG153_VOCS_008,Chloroform,single_substance,,VOC,1,VOCs
+REG153_VOCS_009,Dibromochloromethane,single_substance,,VOC,1,VOCs
+REG153_VOCS_010,"Dichlorobenzene 1,2-",single_substance,,VOC,1,VOCs
+REG153_VOCS_011,"Dichlorobenzene 1,3-",single_substance,,VOC,1,VOCs
+REG153_VOCS_012,"Dichlorobenzene 1,4-",single_substance,,VOC,1,VOCs
+REG153_VOCS_013,Dichlorodifluoromethane,single_substance,,VOC,1,VOCs
+REG153_VOCS_014,"Dichloroethane 1,1-",single_substance,,VOC,1,VOCs
+REG153_VOCS_015,"Dichloroethane 1,2-",single_substance,,VOC,1,VOCs
+REG153_VOCS_016,"Dichloroethylene 1,1-",single_substance,,VOC,1,VOCs
+REG153_VOCS_017,"Dichloroethylene 1,2-cis-",single_substance,,VOC,1,VOCs
+REG153_VOCS_018,"Dichloroethylene 1,2-trans-",single_substance,,VOC,1,VOCs
+REG153_VOCS_019,"Dichloropropane 1,2-",single_substance,,VOC,1,VOCs
+REG153_VOCS_020,"Dichloropropene 1,3- (cis)",single_substance,,VOC,1,VOCs
+REG153_VOCS_021,"Dichloropropene 1,3- (trans)",single_substance,,VOC,1,VOCs
+REG153_VOCS_022,"Dichloropropene 1,3- (cis & trans)",single_substance,,VOC,1,VOCs
+REG153_VOCS_023,Ethylbenzene,single_substance,,BTEX,1,VOCs
+REG153_VOCS_024,Ethylene dibromide,single_substance,,VOC,1,VOCs
+REG153_VOCS_025,Hexane (n-),single_substance,,VOC,1,VOCs
+REG153_VOCS_026,Methyl ethyl ketone,single_substance,,VOC,1,VOCs
+REG153_VOCS_027,Methyl isobutyl ketone,single_substance,,VOC,1,VOCs
+REG153_VOCS_028,Methyl tert-butyl ether (MTBE),single_substance,,VOC,1,VOCs
+REG153_VOCS_029,Methylene chloride,single_substance,,VOC,1,VOCs
+REG153_VOCS_030,Styrene,single_substance,,VOC,1,VOCs
+REG153_VOCS_031,"Tetrachloroethane 1,1,1,2-",single_substance,,VOC,1,VOCs
+REG153_VOCS_032,"Tetrachloroethane 1,1,2,2-",single_substance,,VOC,1,VOCs
+REG153_VOCS_033,Tetrachloroethylene,single_substance,,VOC,1,VOCs
+REG153_VOCS_034,Toluene,single_substance,,BTEX,1,VOCs
+REG153_VOCS_035,"Trichloroethane 1,1,1-",single_substance,,VOC,1,VOCs
+REG153_VOCS_036,"Trichloroethane 1,1,2-",single_substance,,VOC,1,VOCs
+REG153_VOCS_037,Trichloroethylene,single_substance,,VOC,1,VOCs
+REG153_VOCS_038,Trichlorofluoromethane,single_substance,,VOC,1,VOCs
+REG153_VOCS_039,Vinyl chloride,single_substance,,VOC,1,VOCs
+REG153_VOCS_040,Xylene O,single_substance,,BTEX,1,VOCs
+REG153_VOCS_041,Xylene M&P,single_substance,,BTEX,1,VOCs
+REG153_VOCS_042,Xylene mixture,single_substance,,BTEX,1,VOCs

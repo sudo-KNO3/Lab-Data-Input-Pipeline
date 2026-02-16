@@ -1,0 +1,44 @@
+# Manual Curation Patch File Template
+# Purpose: Correct mismatched or incorrectly parsed analyte names from raw data
+# Instructions:
+#   - table_number: Table reference from Reg 153/04 (1-9)
+#   - parameter_original: The misspelled or variant name as it appears in raw data
+#   - parameter_corrected: The standardized preferred name matching reg153_master.csv
+#   - cas_corrected: The correct CAS number (if applicable)
+#   - analyte_type: single_substance, fraction_or_group, suite, or parameter
+#   - notes: Reason for correction or additional context
+# Usage: Load this file to apply corrections to raw laboratory or regulatory data
+table_number,parameter_original,parameter_corrected,cas_corrected,analyte_type,notes
+1,Benezene,Benzene,71-43-2,single_substance,Common misspelling
+1,Toulene,Toluene,108-88-3,single_substance,Common misspelling
+1,Ethyl benzene,Ethylbenzene,100-41-4,single_substance,Spacing variation
+1,Total Xylenes,Xylene (Total),1330-20-7,single_substance,Naming variation
+1,BTEX Suite,BTEX,,suite,Standardize suite naming
+2,Trichloroethene,Trichloroethylene (TCE),79-01-6,single_substance,Alternative IUPAC name
+2,Perchloroethylene,Tetrachloroethylene (PCE),127-18-4,single_substance,Common name variation
+2,VC,Vinyl Chloride,75-01-4,single_substance,Abbreviation expansion
+2,Methylene chloride,Methylene Chloride (Dichloromethane),75-09-2,single_substance,Capitalization
+3,Napthalene,Naphthalene,91-20-3,single_substance,Common misspelling
+3,BaP,Benzo(a)pyrene,50-32-8,single_substance,Abbreviation expansion
+3,PAH-16,PAH Total (16),,suite,Standardize suite naming
+3,Carcinogenic PAHs,PAH Total (Carcinogenic),,suite,Standardize suite naming
+4,PHC F1,Petroleum Hydrocarbons F1 (C6-C10),,fraction_or_group,Expand abbreviation
+4,PHC F2,Petroleum Hydrocarbons F2 (C10-C16),,fraction_or_group,Expand abbreviation
+4,PHC F3,Petroleum Hydrocarbons F3 (C16-C34),,fraction_or_group,Expand abbreviation
+4,PHC F4,Petroleum Hydrocarbons F4 (>C34),,fraction_or_group,Expand abbreviation
+4,F1 (CCME),Petroleum Hydrocarbons F1 (CCME),,fraction_or_group,Standardize CCME naming
+4,TPH,Total Petroleum Hydrocarbons (TPH),,fraction_or_group,Abbreviation expansion
+5,As,Arsenic,7440-38-2,single_substance,Element symbol to name
+5,Cd,Cadmium,7440-43-9,single_substance,Element symbol to name
+5,Cr,Chromium (Total),7440-47-3,single_substance,Element symbol to name
+5,Cr(VI),Chromium (Hexavalent),18540-29-9,single_substance,Specify valence state
+5,Pb,Lead,7439-92-1,single_substance,Element symbol to name
+5,Hg,Mercury,7439-97-6,single_substance,Element symbol to name
+6,PCP,Pentachlorophenol (PCP),87-86-5,single_substance,Abbreviation expansion
+6,o-Cresol,2-Methylphenol (o-Cresol),95-48-7,single_substance,Standardize to IUPAC
+6,p-Cresol,4-Methylphenol (p-Cresol),106-44-5,single_substance,Standardize to IUPAC
+7,DDT,DDT (Total),50-29-3,single_substance,Clarify total DDT
+7,gamma-HCH,Lindane (gamma-BHC),58-89-9,single_substance,Alternative naming
+7,Chlordane,Chlordane (Total),57-74-9,single_substance,Clarify total chlordane
+8,Nitrate as Nitrogen,Nitrate (as N),,parameter,Standardize format
+8,Total Cyanide,Cyanide (Total),14419-01-3,parameter,Standardize format

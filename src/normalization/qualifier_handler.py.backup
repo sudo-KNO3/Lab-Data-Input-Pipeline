@@ -1,0 +1,320 @@
+"""
+Analyte-aware qualifier handling for chemical names.
+
+Strips qualifiers like "total", "dissolved", "recoverable" ONLY when they don't
+affect the regulatory identity of the chemical.
+"""
+
+import re
+from typing import Optional, Set
+
+
+# Common qualifiers that are often redundant
+_COMMON_QUALIFIERS: Set[str] = {
+    'total',
+    'dissolved',
+    'recoverable',
+    'extractable',
+    'filterable',
+    'soluble',
+    'available',
+}
+
+# Method-related qualifiers
+_METHOD_QUALIFIERS: Set[str] = {
+    'as n',
+    'as p',
+    'as s',
+    'as c',
+    'as cn',
+    'as caco3',
+    'by method',
+}
+
+# Qualifiers that should NEVER be stripped (part of regulatory name)
+_PRESERVE_QUALIFIERS: Set[str] = {
+    'hexavalent',
+    'trivalent',
+    'elemental',
+    'ionic',
+    'organic',
+    'inorganic',
+}
+
+# Compiled patterns for performance
+_QUALIFIER_PATTERN = re.compile(
+    r'\b(' + '|'.join(_COMMON_QUALIFIERS) + r')\b',
+    re.IGNORECASE
+)
+
+_METHOD_PATTERN = re.compile(
+    r'\b(as\s+[a-z0-9]+|by\s+method\s+\d+)\b',
+    re.IGNORECASE
+)
+
+_PRESERVE_PATTERN = re.compile(
+    r'\b(' + '|'.join(_PRESERVE_QUALIFIERS) + r')\b',
+    re.IGNORECASE
+)
+
+# Pattern for leading qualifiers (at start of string)
+_LEADING_QUALIFIER_PATTERN = re.compile(
+    r'^(' + '|'.join(_COMMON_QUALIFIERS) + r')\s+',
+    re.IGNORECASE
+)
+
+# Pattern for trailing qualifiers (at end, often after comma)
+_TRAILING_QUALIFIER_PATTERN = re.compile(
+    r',?\s*\b(' + '|'.join(_COMMON_QUALIFIERS) + r')\s*$',
+    re.IGNORECASE
+)
+
+
+def strip_qualifiers(text: str, check_canonical: bool = True, preserve_method: bool = True) -> str:
+    """
+    Strip qualifiers from chemical names intelligently.
+    
+    Removes qualifiers like "total", "dissolved", "recoverable" ONLY if they
+    are truly redundant. Preserves qualifiers that are part of the regulatory
+    identity (e.g., "Chromium, Hexavalent").
+    
+    Args:
+        text: Chemical name with potential qualifiers
+        check_canonical: If True, preserve qualifiers that affect identity
+        preserve_method: If True, preserve method-related qualifiers like "as N"
+        
+    Returns:
+        Text with qualifiers removed (if safe to do so)
+        
+    Examples:
+        >>> strip_qualifiers("Lead, Total")
+        'lead'
+        
+        >>> strip_qualifiers("Chromium, Hexavalent")
+        'chromium, hexavalent'
+        
+        >>> strip_qualifiers("Total Phosphorus as P")
+        'phosphorus'
+        
+        >>> strip_qualifiers("Dissolved Oxygen")
+        'oxygen'
+        
+        >>> strip_qualifiers("Chromium, Hexavalent (Total)")
+        'chromium, hexavalent'
+    """
+    if not text or not isinstance(text, str):
+        return ""
+    
+    original = text
+    text = text.strip()
+    
+    # Normalize first (lowercase)
+    from .text_normalizer import normalize_text
+    text = normalize_text(text)
+    
+    # Check if text contains preserve-worthy qualifiers
+    if check_canonical and _PRESERVE_PATTERN.search(text):
+        # Still remove common qualifiers, but keep the preserved ones
+        text = _strip_common_only(text)
+        return text
+    
+    # Remove leading qualifiers (e.g., "Total Lead" -> "Lead")
+    text = _LEADING_QUALIFIER_PATTERN.sub('', text)
+    
+    # Remove trailing qualifiers (e.g., "Lead, Total" -> "Lead")
+    text = _TRAILING_QUALIFIER_PATTERN.sub('', text)
+    
+    # Remove qualifiers in parentheses
+    text = re.sub(r'\(\s*(' + '|'.join(_COMMON_QUALIFIERS) + r')\s*\)', '', text, flags=re.IGNORECASE)
+    
+    # Remove method qualifiers if requested
+    if not preserve_method:
+        text = _METHOD_PATTERN.sub('', text)
+    
+    # Clean up any remaining standalone qualifiers
+    text = _remove_standalone_qualifiers(text)
+    
+    # Clean up extra whitespace and commas
+    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r',\s*$', '', text)  # Remove trailing comma
+    text = re.sub(r'^\s*,', '', text)  # Remove leading comma
+    text = re.sub(r'\s*,\s*', ', ', text)  # Normalize comma spacing
+    
+    # If we stripped everything, return original normalized
+    if not text:
+        return normalize_text(original)
+    
+    return text
+
+
+def _strip_common_only(text: str) -> str:
+    """
+    Strip only common qualifiers, preserving important ones.
+    
+    Args:
+        text: Input text
+        
+    Returns:
+        Text with only common qualifiers removed
+    """
+    # Remove common qualifiers that appear at boundaries
+    text = _LEADING_QUALIFIER_PATTERN.sub('', text)
+    text = _TRAILING_QUALIFIER_PATTERN.sub('', text)
+    
+    # Don't remove qualifiers in the middle to avoid breaking compound names
+    
+    return text
+
+
+def _remove_standalone_qualifiers(text: str) -> str:
+    """
+    Remove qualifiers that stand alone (not part of compound name).
+    
+    Args:
+        text: Input text
+        
+    Returns:
+        Text with standalone qualifiers removed
+    """
+    # Split on commas to handle parts separately
+    parts = [p.strip() for p in text.split(',')]
+    
+    # Remove parts that are just qualifiers
+    filtered_parts = []
+    for part in parts:
+        if part.lower() not in _COMMON_QUALIFIERS:
+            filtered_parts.append(part)
+    
+    if not filtered_parts:
+        return text  # Keep original if we'd remove everything
+    
+    return ', '.join(filtered_parts)
+
+
+def has_qualifier(text: str) -> bool:
+    """
+    Check if text contains any qualifier.
+    
+    Args:
+        text: Chemical name
+        
+    Returns:
+        True if text contains a qualifier
+        
+    Examples:
+        >>> has_qualifier("Lead, Total")
+        True
+        
+        >>> has_qualifier("Lead")
+        False
+        
+        >>> has_qualifier("Chromium, Hexavalent")
+        True
+    """
+    if not text:
+        return False
+    
+    return bool(_QUALIFIER_PATTERN.search(text) or _METHOD_PATTERN.search(text))
+
+
+def extract_qualifier(text: str) -> Optional[str]:
+    """
+    Extract the qualifier from a chemical name.
+    
+    Args:
+        text: Chemical name with potential qualifier
+        
+    Returns:
+        The qualifier if found, None otherwise
+        
+    Examples:
+        >>> extract_qualifier("Lead, Total")
+        'total'
+        
+        >>> extract_qualifier("Total Lead")
+        'total'
+        
+        >>> extract_qualifier("Lead")
+        None
+    """
+    if not text:
+        return None
+    
+    # Try to find leading qualifier
+    match = _LEADING_QUALIFIER_PATTERN.search(text)
+    if match:
+        return match.group(1).lower()
+    
+    # Try to find trailing qualifier
+    match = _TRAILING_QUALIFIER_PATTERN.search(text)
+    if match:
+        return match.group(1).lower()
+    
+    # Try to find any qualifier
+    match = _QUALIFIER_PATTERN.search(text)
+    if match:
+        return match.group(1).lower()
+    
+    return None
+
+
+def split_qualifier(text: str) -> tuple[str, Optional[str]]:
+    """
+    Split text into base name and qualifier.
+    
+    Args:
+        text: Chemical name with potential qualifier
+        
+    Returns:
+        Tuple of (base_name, qualifier)
+        
+    Examples:
+        >>> split_qualifier("Lead, Total")
+        ('lead', 'total')
+        
+        >>> split_qualifier("Total Phosphorus")
+        ('phosphorus', 'total')
+        
+        >>> split_qualifier("Benzene")
+        ('benzene', None)
+    """
+    if not text:
+        return ("", None)
+    
+    # Normalize the text first
+    from .text_normalizer import normalize_text
+    text = normalize_text(text)
+    
+    qualifier = extract_qualifier(text)
+    if qualifier:
+        # Remove the qualifier to get base name
+        base = strip_qualifiers(text, check_canonical=False, preserve_method=False)
+        return (base, qualifier)
+    
+    return (text, None)
+
+
+def should_preserve_qualifier(text: str) -> bool:
+    """
+    Determine if a qualifier should be preserved based on regulatory importance.
+    
+    Args:
+        text: Chemical name with qualifier
+        
+    Returns:
+        True if the qualifier should be preserved
+        
+    Examples:
+        >>> should_preserve_qualifier("Chromium, Hexavalent")
+        True
+        
+        >>> should_preserve_qualifier("Lead, Total")
+        False
+        
+        >>> should_preserve_qualifier("Mercury, Elemental")
+        True
+    """
+    if not text:
+        return False
+    
+    return bool(_PRESERVE_PATTERN.search(text))

@@ -1,0 +1,111 @@
+# API Configuration for Bootstrap Phase
+# These APIs are used ONCE during initial synonym harvesting
+# After bootstrap, the system runs entirely offline
+
+api_endpoints:
+  pubchem:
+    base_url: "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+    rate_limit: 5  # requests per second
+    requires_auth: false
+    endpoints:
+      by_name: "/compound/name/{identifier}/synonyms/JSON"
+      by_cas: "/compound/name/{cas_number}/synonyms/JSON"
+      by_cid: "/compound/cid/{cid}/synonyms/JSON"
+    timeout: 10
+    retry_attempts: 3
+    cache_ttl: 86400  # 24 hours
+
+  comptox:
+    base_url: "https://comptox.epa.gov/dashboard-api"
+    rate_limit: 10
+    requires_auth: false
+    endpoints:
+      by_dtxsid: "/chemical/{dtxsid}/synonyms"
+      search: "/search/chemical/by-name/{name}"
+    timeout: 15
+    retry_attempts: 3
+    cache_ttl: 86400
+
+  cir:
+    # NCI Chemical Identifier Resolver
+    base_url: "https://cactus.nci.nih.gov/chemical/structure"
+    rate_limit: 2
+    requires_auth: false
+    endpoints:
+      resolve: "/{identifier}/names"
+      cas_to_name: "/{cas_number}/names"
+    timeout: 20
+    retry_attempts: 2
+    cache_ttl: 86400
+
+  cas_common_chemistry:
+    base_url: "https://commonchemistry.cas.org/api"
+    rate_limit: 1
+    requires_auth: true  # Free registration required
+    endpoints:
+      by_cas: "/detail?cas_rn={cas_number}"
+    timeout: 10
+    retry_attempts: 3
+    cache_ttl: 86400
+
+  npri:
+    # National Pollutant Release Inventory (Canada)
+    base_url: "https://www.canada.ca/en/services/environment/pollution-waste-management/national-pollutant-release-inventory"
+    rate_limit: 5
+    requires_auth: false
+    endpoints:
+      substances: "/substances-list"
+    timeout: 15
+    retry_attempts: 3
+    cache_ttl: 604800  # 7 days
+
+  chemspider:
+    # Optional - requires API key
+    base_url: "https://api.rsc.org"
+    rate_limit: 1
+    requires_auth: true
+    endpoints:
+      search: "/compounds/v1/filter/name"
+      details: "/compounds/v1/records/{record_id}/details"
+    timeout: 10
+    retry_attempts: 3
+    cache_ttl: 86400
+    enabled: false  # Enable only if API key available
+
+# General API settings
+general:
+  user_agent: "OntarioReg153ChemicalMatcher/0.1 (Environmental Consulting; Contact: your_email@domain.com)"
+  cache_directory: "data/raw/api_harvest/cache"
+  harvest_batch_size: 50
+  max_synonyms_per_chemical: 100
+  
+  # Quality filters
+  filters:
+    min_synonym_length: 3
+    max_synonym_length: 200
+    exclude_patterns:
+      - "^UNII-"  # FDA identifiers
+      - "^DTXSID"  # Internal EPA IDs
+      - "^CHEMBL"  # ChEMBL IDs
+      - "^\\d+$"  # Pure numbers
+      - "^[A-Z]{1,2}\\d{5,}$"  # Generic ID patterns
+    
+  # Harvest strategy
+  harvest_order:
+    - pubchem
+    - comptox
+    - cir
+    - npri
+    - cas_common_chemistry
+  
+  # Error handling
+  fail_fast: false  # Continue on API errors
+  log_failures: true
+  retry_failed_later: true
+
+# Bootstrap execution notes
+# 1. Run once during initial setup
+# 2. Results cached in data/raw/api_harvest/
+# 3. Merge into data/processed/synonyms/
+# 4. Generate embeddings from merged corpus
+# 5. Never touch APIs again unless adding new chemicals

@@ -1,0 +1,58 @@
+# Learning System Configuration
+# Configuration for incremental learning, thresholds, and calibration
+
+# Confidence thresholds for match decisions
+thresholds:
+  auto_accept: 0.93      # Auto-accept matches above this confidence
+  review: 0.75           # Present matches in this range for review
+  unknown: 0.75          # Below this, mark as unknown
+  disagreement_cap: 0.84 # Max confidence when methods disagree
+  exact_match: 1.0       # Exact string match confidence
+  fuzzy_high: 0.95       # High-confidence fuzzy match
+  semantic_high: 0.90    # High-confidence semantic match
+
+# Learning system parameters
+learning:
+  retraining_trigger_count: 2000    # Number of new synonyms before full retrain
+  incremental_save_frequency: 100   # Save FAISS index every N additions
+  calibration_period_days: 30       # Days of data for threshold calibration
+  min_decisions_for_calibration: 100  # Minimum decisions needed for calibration
+
+# Matching engine configuration
+matching:
+  fuzzy_algorithm: token_set_ratio  # Fuzzy matching algorithm
+  semantic_model: all-MiniLM-L6-v2  # Sentence transformer model
+  top_k_candidates: 5               # Number of top candidates to return
+  enable_cas_extraction: true       # Extract CAS numbers from text
+
+# Variant clustering parameters
+clustering:
+  similarity_threshold: 0.85  # Minimum similarity for clustering
+  min_cluster_size: 2         # Minimum size for a cluster
+
+# Database batch operations
+database:
+  batch_size: 1000          # Records per batch operation
+  connection_pool_size: 5   # DB connection pool size
+
+# Decision gate parameters (Phase B)
+decision:
+  margin_threshold: 0.05    # Minimum margin (s1-s2) for auto-accept
+  ood_threshold: 0.50       # Below this, classify as NOVEL_COMPOUND (OOD)
+  score_threshold: 0.93     # Alias for auto_accept (used by decision gate)
+
+# Vendor-conditioned micro-controller (Phase B+)
+vendor:
+  enable_vendor_cache: true           # Enable LabVariant cache as cascade Step 0
+  vendor_boost: 0.02                  # Tiebreak boost for synonyms from same vendor (< margin_threshold)
+  decay_window_days: 180              # Days before vendor cache decays from hard to soft
+  decay_lambda: 0.10                  # Decay rate: c = max(floor, 1.0 - lambda * age_ratio)
+  decay_floor: 0.90                   # Minimum confidence floor for stale cache entries
+  min_confirmations: 3                # Distinct-submission consensus required for hard cache
+  max_collision_count: 2              # Collisions before UNSTABLE lockout
+  unstable_cooldown_days: 7           # Dwell time after UNSTABLE before reaccumulation
+  dual_gate_margin: 0.06              # Minimum cascade margin for global synonym creation
+  max_promotions_base: 10             # Max hard-cache promotions per vendor per day (adaptive)
+  max_global_synonyms_per_day: 20     # Daily cap on validated_runtime synonym creation
+  ood_embedding_distance_max: 0.70    # Embedding distance threshold for OOD pre-screen
+  collision_ema_alpha: 0.3            # EMA smoothing factor for collision rate telemetry

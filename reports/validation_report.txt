@@ -1,0 +1,59 @@
+======================================================================
+REG 153 CHEMICAL MATCHER - VALIDATION REPORT
+======================================================================
+
+Generated: 2026-02-12 14:35:49
+Overall Status: FAILED
+
+VALIDATION CHECKS:
+----------------------------------------------------------------------
+
+DATABASE_CONNECTION: PASSED
+  tables: ['analytes', 'api_harvest_metadata', 'embeddings_metadata', 'lab_variants', 'match_decisions', 'snapshot_registry', 'synonyms']
+  analyte_count: 125
+  synonym_count: 3415
+
+CONFIGURATION: PASSED
+  config_files: ['api_config.yaml', 'learning_config.yaml']
+  sample_config: {'api_endpoints': {'pubchem': {'base_url': 'https://pubchem.ncbi.nlm.nih.gov/rest/pug', 'rate_limit': 5, 'requires_auth': False, 'endpoints': {'by_name': '/compound/name/{identifier}/synonyms/JSON', 'by_cas': '/compound/name/{cas_number}/synonyms/JSON', 'by_cid': '/compound/cid/{cid}/synonyms/JSON'}, 'timeout': 10, 'retry_attempts': 3, 'cache_ttl': 86400}, 'comptox': {'base_url': 'https://comptox.epa.gov/dashboard-api', 'rate_limit': 10, 'requires_auth': False, 'endpoints': {'by_dtxsid': '/chemical/{dtxsid}/synonyms', 'search': '/search/chemical/by-name/{name}'}, 'timeout': 15, 'retry_attempts': 3, 'cache_ttl': 86400}, 'cir': {'base_url': 'https://cactus.nci.nih.gov/chemical/structure', 'rate_limit': 2, 'requires_auth': False, 'endpoints': {'resolve': '/{identifier}/names', 'cas_to_name': '/{cas_number}/names'}, 'timeout': 20, 'retry_attempts': 2, 'cache_ttl': 86400}, 'cas_common_chemistry': {'base_url': 'https://commonchemistry.cas.org/api', 'rate_limit': 1, 'requires_auth': True, 'endpoints': {'by_cas': '/detail?cas_rn={cas_number}'}, 'timeout': 10, 'retry_attempts': 3, 'cache_ttl': 86400}, 'npri': {'base_url': 'https://www.canada.ca/en/services/environment/pollution-waste-management/national-pollutant-release-inventory', 'rate_limit': 5, 'requires_auth': False, 'endpoints': {'substances': '/substances-list'}, 'timeout': 15, 'retry_attempts': 3, 'cache_ttl': 604800}, 'chemspider': {'base_url': 'https://api.rsc.org', 'rate_limit': 1, 'requires_auth': True, 'endpoints': {'search': '/compounds/v1/filter/name', 'details': '/compounds/v1/records/{record_id}/details'}, 'timeout': 10, 'retry_attempts': 3, 'cache_ttl': 86400, 'enabled': False}}, 'general': {'user_agent': 'OntarioReg153ChemicalMatcher/0.1 (Environmental Consulting; Contact: your_email@domain.com)', 'cache_directory': 'data/raw/api_harvest/cache', 'harvest_batch_size': 50, 'max_synonyms_per_chemical': 100, 'filters': {'min_synonym_length': 3, 'max_synonym_length': 200, 'exclude_patterns': ['^UNII-', '^DTXSID', '^CHEMBL', '^\\d+$', '^[A-Z]{1,2}\\d{5,}$']}, 'harvest_order': ['pubchem', 'comptox', 'cir', 'npri', 'cas_common_chemistry'], 'fail_fast': False, 'log_failures': True, 'retry_failed_later': True}}
+
+MODEL_FILES: PASSED
+  models_dir_exists: True
+  embeddings_dir_exists: True
+  model_files: ['README.md']
+  embedding_files: ['.gitkeep']
+
+DATA_INTEGRITY: PASSED
+  orphaned_synonyms: 0
+  analytes_no_synonyms: 0
+  type_counts: {'AnalyteType.FRACTION_OR_GROUP': 8, 'AnalyteType.SINGLE_SUBSTANCE': 116, 'AnalyteType.SUITE': 1}
+  issues: []
+  warnings: []
+
+MATCHING_ENGINE: FAILED
+  passed: 0
+  failed: 9
+  total: 9
+  pass_rate: 0.0
+
+PERFORMANCE: PASSED
+  exact_match_ms: 0.83
+  exact_target_ok: True
+  resolution_ms: 0.49
+  resolution_target_ok: True
+  batch_avg_ms: 0.67
+  batch_target_ok: True
+
+----------------------------------------------------------------------
+ERRORS:
+  - Matching: Benzene failed
+  - Matching: Toluene failed
+  - Matching: Ethylbenzene failed
+  - Matching: 71-43-2 failed
+  - Matching: 108-88-3 failed
+  - Matching: PHC F1 failed
+  - Matching: PHC F2 failed
+  - Matching: Arsenic failed
+  - Matching: Lead failed
+
+======================================================================

@@ -1,0 +1,113 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
+
+# Environment variables
+.env
+.env.local
+
+# Data files (large)
+data/raw/api_harvest/**/*.json
+data/raw/lab_edds/**/*.xlsx
+data/raw/lab_edds/**/*.csv
+data/raw/lab_archive/
+data/embeddings/*.npy
+data/embeddings/*.bin
+
+# Keep structure but ignore large files
+!data/raw/api_harvest/.gitkeep
+!data/raw/lab_edds/.gitkeep
+!data/embeddings/.gitkeep
+
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Excel lab example files (raw data)
+Excel Lab examples/
+
+# API keys and secrets
+*.key
+secrets/
+credentials/
+
+# Model artifacts (large)
+models/**/*.bin
+models/**/*.pt
+models/**/*.pth
+!models/.gitkeep
+
+# Snapshots (versioned separately)
+snapshots/db/*.db
+snapshots/embeddings/*.npy
+snapshots/embeddings/*.bin
+
+# Logs
+logs/
+*.log
+
+# Reports
+reports/*.html
+reports/*.xlsx
+reports/*.csv
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# pytest
+.pytest_cache/
+
+# Ruff
+.ruff_cache/

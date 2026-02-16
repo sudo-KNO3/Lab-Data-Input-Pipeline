@@ -19,14 +19,14 @@ from datetime import datetime
 import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.database.connection import get_session
-from src.database.models import Synonym, Analyte, EmbeddingMetadata
+from src.database.connection import DatabaseManager
+from src.database.models import Synonym, Analyte, EmbeddingsMetadata
 from src.matching.types import EmbeddingConfig
 
 logging.basicConfig(
@@ -71,12 +71,22 @@ def main():
     # Step 1: Load synonyms from database
     logger.info("Step 1: Loading synonyms from database...")
     
-    session = next(get_session())
+    db = DatabaseManager()
+    session = db.get_session()
     
     try:
-        # Query all synonyms with their analytes
+        # Query specific columns to avoid ORM enum mapping issues
         stmt = (
-            select(Synonym, Analyte)
+            select(
+                Synonym.id,
+                Synonym.synonym_raw,
+                Synonym.synonym_norm,
+                Synonym.harvest_source,
+                Analyte.analyte_id,
+                Analyte.preferred_name,
+                Analyte.cas_number,
+            )
+            .select_from(Synonym)
             .join(Analyte)
             .order_by(Synonym.id)
         )
@@ -93,17 +103,17 @@ def main():
         synonym_data = []
         texts_to_embed = []
         
-        for synonym, analyte in results:
+        for row in results:
             synonym_data.append({
-                'synonym_id': synonym.id,
-                'analyte_id': analyte.id,
-                'synonym_raw': synonym.synonym_raw,
-                'synonym_norm': synonym.synonym_norm,
-                'analyte_name': analyte.preferred_name,
-                'cas_number': analyte.cas_number,
-                'harvest_source': synonym.harvest_source,
+                'synonym_id': row.id,
+                'analyte_id': row.analyte_id,
+                'synonym_raw': row.synonym_raw,
+                'synonym_norm': row.synonym_norm,
+                'analyte_name': row.preferred_name,
+                'cas_number': row.cas_number,
+                'harvest_source': row.harvest_source,
             })
-            texts_to_embed.append(synonym.synonym_norm)
+            texts_to_embed.append(row.synonym_norm)
         
         logger.info(f"Prepared {len(texts_to_embed)} texts for embedding")
         
@@ -191,24 +201,32 @@ def main():
         # Step 10: Update database metadata
         logger.info("Step 10: Updating embeddings_metadata table...")
         
+        # Compute model hash for provenance tracking
+        model_hash = hashlib.sha256(config.model_name.encode()).hexdigest()
+        
         # Clear old embeddings metadata
-        session.query(EmbeddingMetadata).delete()
-        
-        # Insert new metadata
-        for i, data in enumerate(synonym_data):
-            embedding_meta = EmbeddingMetadata(
-                synonym_id=data['synonym_id'],
-                analyte_id=data['analyte_id'],
-                text_embedded=data['synonym_norm'],
-                model_name=config.model_name,
-                model_version="v1.0",
-                embedding_dim=dimension,
-                file_path=config.faiss_index_path,
-                vector_index=i,
-            )
-            session.add(embedding_meta)
-        
+        session.execute(delete(EmbeddingsMetadata))
         session.commit()
+        
+        # Insert new metadata in batches
+        batch = []
+        for i, data in enumerate(synonym_data):
+            batch.append(EmbeddingsMetadata(
+                synonym_id=data['synonym_id'],
+                text_content=data['synonym_norm'],
+                model_name=config.model_name,
+                model_hash=model_hash,
+                embedding_index=i,
+            ))
+            if len(batch) >= 500:
+                session.add_all(batch)
+                session.commit()
+                batch = []
+        
+        if batch:
+            session.add_all(batch)
+            session.commit()
+        
         logger.info(f"Updated {len(synonym_data)} embedding metadata records")
         
         # Summary

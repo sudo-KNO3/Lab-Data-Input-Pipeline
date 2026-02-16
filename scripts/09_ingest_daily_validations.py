@@ -23,7 +23,7 @@ sys.path.insert(0, str(project_root))
 from sqlalchemy import select, and_, update
 from sqlalchemy.orm import Session
 
-from src.database.connection import get_session_factory
+from src.database.connection import DatabaseManager
 from src.database.models import MatchDecision
 from src.learning.synonym_ingestion import batch_ingest_validations
 from src.learning.incremental_embedder import IncrementalEmbedder
@@ -278,8 +278,8 @@ def main():
     
     try:
         # Initialize database session
-        SessionFactory = get_session_factory()
-        session = SessionFactory()
+        db = DatabaseManager()
+        session = db.get_session()
         
         # Get unvalidated decisions
         decisions = get_unvalidated_decisions(session, days_back=args.days)

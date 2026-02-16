@@ -169,7 +169,8 @@ class SemanticMatcher:
             # and margin integrity for downstream gating decisions.
             # Step-function binning was removed to maintain
             # discrimination needed for margin-based acceptance.
-            confidence = similarity
+            # Clamp to [0, 1] to guard against FP imprecision.
+            confidence = max(0.0, min(1.0, similarity))
             
             match = Match(
                 analyte_id=meta.get('analyte_id', -1),

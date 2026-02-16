@@ -20,7 +20,7 @@ import yaml
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.database.connection import get_session_factory
+from src.database.connection import DatabaseManager
 from src.learning.threshold_calibrator import (
     analyze_match_decisions,
     recalibrate_thresholds,
@@ -359,8 +359,8 @@ def main():
     
     try:
         # Initialize database session
-        SessionFactory = get_session_factory()
-        session = SessionFactory()
+        db = DatabaseManager()
+        session = db.get_session()
         
         # Generate comprehensive report
         report = generate_comprehensive_report(session, days_back=args.days)

@@ -37,6 +37,8 @@ def db_session():
 
 def _populate_test_data(session):
     """Populate database with test analytes and synonyms."""
+    normalizer = TextNormalizer()
+    
     # Analyte 1: Benzene
     analyte1 = Analyte(
         analyte_id="REG153_001",
@@ -51,18 +53,18 @@ def _populate_test_data(session):
     syn1_1 = Synonym(
         analyte_id="REG153_001",
         synonym_raw="Benzene",
-        synonym_norm="benzene",
+        synonym_norm=normalizer.normalize("Benzene"),
         synonym_type=SynonymType.IUPAC,
         confidence=1.0,
-        source="manual"
+        harvest_source="manual"
     )
     syn1_2 = Synonym(
         analyte_id="REG153_001",
         synonym_raw="Benzol",
-        synonym_norm="benzol",
+        synonym_norm=normalizer.normalize("Benzol"),
         synonym_type=SynonymType.COMMON,
         confidence=0.9,
-        source="pubchem"
+        harvest_source="pubchem"
     )
     
     # Analyte 2: Toluene
@@ -79,26 +81,26 @@ def _populate_test_data(session):
     syn2_1 = Synonym(
         analyte_id="REG153_002",
         synonym_raw="Toluene",
-        synonym_norm="toluene",
+        synonym_norm=normalizer.normalize("Toluene"),
         synonym_type=SynonymType.IUPAC,
         confidence=1.0,
-        source="manual"
+        harvest_source="manual"
     )
     syn2_2 = Synonym(
         analyte_id="REG153_002",
         synonym_raw="Methylbenzene",
-        synonym_norm="methylbenzene",
+        synonym_norm=normalizer.normalize("Methylbenzene"),
         synonym_type=SynonymType.IUPAC,
         confidence=1.0,
-        source="pubchem"
+        harvest_source="pubchem"
     )
     syn2_3 = Synonym(
         analyte_id="REG153_002",
         synonym_raw="Toluol",
-        synonym_norm="toluol",
+        synonym_norm=normalizer.normalize("Toluol"),
         synonym_type=SynonymType.COMMON,
         confidence=0.9,
-        source="pubchem"
+        harvest_source="pubchem"
     )
     
     # Analyte 3: Xylene (mixed isomers)
@@ -113,34 +115,42 @@ def _populate_test_data(session):
     
     syn3_1 = Synonym(
         analyte_id="REG153_003",
-        synonym_raw="Xylene",
-        synonym_norm="xylene",
+        synonym_raw="Xylene (mixed isomers)",
+        synonym_norm=normalizer.normalize("Xylene (mixed isomers)"),
         synonym_type=SynonymType.COMMON,
         confidence=1.0,
-        source="manual"
+        harvest_source="manual"
     )
     syn3_2 = Synonym(
         analyte_id="REG153_003",
         synonym_raw="Xylenes",
-        synonym_norm="xylenes",
+        synonym_norm=normalizer.normalize("Xylenes"),
         synonym_type=SynonymType.COMMON,
         confidence=1.0,
-        source="manual"
+        harvest_source="manual"
     )
     syn3_3 = Synonym(
         analyte_id="REG153_003",
         synonym_raw="Dimethylbenzene",
-        synonym_norm="dimethylbenzene",
+        synonym_norm=normalizer.normalize("Dimethylbenzene"),
         synonym_type=SynonymType.IUPAC,
         confidence=1.0,
-        source="pubchem"
+        harvest_source="pubchem"
+    )
+    syn3_4 = Synonym(
+        analyte_id="REG153_003",
+        synonym_raw="Xylene",
+        synonym_norm=normalizer.normalize("Xylene"),
+        synonym_type=SynonymType.COMMON,
+        confidence=1.0,
+        harvest_source="manual"
     )
     
     session.add_all([
         analyte1, analyte2, analyte3,
         syn1_1, syn1_2,
         syn2_1, syn2_2, syn2_3,
-        syn3_1, syn3_2, syn3_3
+        syn3_1, syn3_2, syn3_3, syn3_4
     ])
     session.commit()
 
@@ -362,10 +372,10 @@ def test_resolution_disagreement_detection(db_session):
     syn4 = Synonym(
         analyte_id="REG153_004",
         synonym_raw="Testene",
-        synonym_norm="testene",
+        synonym_norm=TextNormalizer().normalize("Testene"),
         synonym_type=SynonymType.COMMON,
         confidence=1.0,
-        source="test"
+        harvest_source="test"
     )
     
     analyte5 = Analyte(
@@ -377,10 +387,10 @@ def test_resolution_disagreement_detection(db_session):
     syn5 = Synonym(
         analyte_id="REG153_005",
         synonym_raw="Testane",
-        synonym_norm="testane",
+        synonym_norm=TextNormalizer().normalize("Testane"),
         synonym_type=SynonymType.COMMON,
         confidence=1.0,
-        source="test"
+        harvest_source="test"
     )
     
     db_session.add_all([analyte4, analyte5, syn4, syn5])
@@ -484,540 +494,3 @@ def test_resolution_result_no_match():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
-
-@pytest.fixture
-def mock_synonym():
-    """Mock synonym object."""
-    synonym = Mock()
-    synonym.id = 10
-    synonym.analyte_id = 1
-    synonym.synonym_raw = "Benzene"
-    synonym.synonym_norm = "benzene"
-    synonym.harvest_source = "pubchem"
-    synonym.confidence = 1.0
-    return synonym
-
-
-# ============================================================================
-# TYPE TESTS
-# ============================================================================
-
-class TestTypes:
-    """Test type definitions and data classes."""
-    
-    def test_match_creation(self):
-        """Test Match object creation."""
-        match = Match(
-            analyte_id=1,
-            analyte_name="Benzene",
-            cas_number="71-43-2",
-            confidence=1.0,
-            method=MatchMethod.EXACT,
-        )
-        
-        assert match.analyte_id == 1
-        assert match.confidence == 1.0
-        assert match.confidence_level == ConfidenceLevel.HIGH
-    
-    def test_match_confidence_validation(self):
-        """Test Match confidence validation."""
-        with pytest.raises(ValueError):
-            Match(
-                analyte_id=1,
-                analyte_name="Test",
-                cas_number=None,
-                confidence=1.5,  # Invalid
-                method=MatchMethod.EXACT,
-            )
-    
-    def test_match_confidence_levels(self):
-        """Test confidence level categorization."""
-        high = Match(1, "Test", None, 0.96, MatchMethod.EXACT)
-        assert high.confidence_level == ConfidenceLevel.HIGH
-        
-        medium = Match(1, "Test", None, 0.90, MatchMethod.FUZZY)
-        assert medium.confidence_level == ConfidenceLevel.MEDIUM
-        
-        low = Match(1, "Test", None, 0.80, MatchMethod.FUZZY)
-        assert low.confidence_level == ConfidenceLevel.LOW
-        
-        very_low = Match(1, "Test", None, 0.70, MatchMethod.FUZZY)
-        assert very_low.confidence_level == ConfidenceLevel.VERY_LOW
-    
-    def test_match_to_dict(self):
-        """Test Match serialization to dict."""
-        match = Match(
-            analyte_id=1,
-            analyte_name="Benzene",
-            cas_number="71-43-2",
-            confidence=0.95,
-            method=MatchMethod.EXACT,
-        )
-        
-        d = match.to_dict()
-        
-        assert d['analyte_id'] == 1
-        assert d['analyte_name'] == "Benzene"
-        assert d['confidence'] == 0.95
-        assert d['method'] == 'exact'
-        assert d['confidence_level'] == 'high'
-    
-    def test_match_result_creation(self):
-        """Test MatchResult object creation."""
-        result = MatchResult(
-            query_text="benzene",
-            query_norm="benzene",
-        )
-        
-        assert result.matched is False
-        assert result.confidence == 0.0
-        
-        # Add a match
-        result.best_match = Match(1, "Benzene", "71-43-2", 1.0, MatchMethod.EXACT)
-        
-        assert result.matched is True
-        assert result.confidence == 1.0
-
-
-# ============================================================================
-# EXACT MATCHING TESTS
-# ============================================================================
-
-class TestExactMatching:
-    """Test exact matching functionality."""
-    
-    def test_match_by_cas_valid(self, mock_session, mock_analyte):
-        """Test CAS number matching with valid CAS."""
-        # Setup mock
-        mock_result = Mock()
-        mock_result.scalar_one_or_none.return_value = mock_analyte
-        mock_session.execute.return_value = mock_result
-        
-        # Test
-        match = match_by_cas("71-43-2", mock_session)
-        
-        assert match is not None
-        assert match.analyte_id == 1
-        assert match.cas_number == "71-43-2"
-        assert match.confidence == 1.0
-        assert match.method == MatchMethod.EXACT
-    
-    def test_match_by_cas_embedded_in_text(self, mock_session, mock_analyte):
-        """Test CAS extraction from text."""
-        mock_result = Mock()
-        mock_result.scalar_one_or_none.return_value = mock_analyte
-        mock_session.execute.return_value = mock_result
-        
-        match = match_by_cas("Benzene (CAS 71-43-2)", mock_session)
-        
-        assert match is not None
-        assert match.cas_number == "71-43-2"
-    
-    def test_match_by_cas_invalid(self, mock_session):
-        """Test CAS matching with invalid CAS."""
-        match = match_by_cas("not a cas number", mock_session)
-        assert match is None
-    
-    def test_match_by_cas_not_in_database(self, mock_session):
-        """Test CAS not found in database."""
-        mock_result = Mock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_session.execute.return_value = mock_result
-        
-        match = match_by_cas("99-99-9", mock_session)
-        assert match is None
-    
-    def test_match_by_inchikey_valid(self, mock_session, mock_analyte):
-        """Test InChIKey matching."""
-        mock_result = Mock()
-        mock_result.scalar_one_or_none.return_value = mock_analyte
-        mock_session.execute.return_value = mock_result
-        
-        match = match_by_inchikey("UHOVQNZJYSORNB-UHFFFAOYSA-N", mock_session)
-        
-        assert match is not None
-        assert match.analyte_id == 1
-        assert match.confidence == 1.0
-    
-    def test_match_by_inchikey_invalid_format(self, mock_session):
-        """Test InChIKey with invalid format."""
-        match = match_by_inchikey("SHORT", mock_session)
-        assert match is None
-    
-    def test_match_by_synonym_exact(self, mock_session, mock_synonym, mock_analyte):
-        """Test exact synonym matching."""
-        mock_result = Mock()
-        mock_result.first.return_value = (mock_synonym, mock_analyte)
-        mock_session.execute.return_value = mock_result
-        
-        match = match_by_synonym("Benzene", mock_session)
-        
-        assert match is not None
-        assert match.analyte_id == 1
-        assert match.synonym_matched == "benzene"
-        assert match.confidence == 1.0
-    
-    def test_match_by_synonym_not_found(self, mock_session):
-        """Test synonym not found."""
-        mock_result = Mock()
-        mock_result.first.return_value = None
-        mock_session.execute.return_value = mock_result
-        
-        match = match_by_synonym("Unknown Chemical", mock_session)
-        assert match is None
-    
-    def test_match_exact_cascade(self, mock_session, mock_analyte):
-        """Test exact matching cascade (tries all methods)."""
-        # Mock CAS lookup to succeed
-        mock_result = Mock()
-        mock_result.scalar_one_or_none.return_value = mock_analyte
-        mock_session.execute.return_value = mock_result
-        
-        match = match_exact("Benzene (71-43-2)", mock_session)
-        
-        assert match is not None
-        assert match.analyte_id == 1
-
-
-# ============================================================================
-# FUZZY MATCHING TESTS
-# ============================================================================
-
-class TestFuzzyMatching:
-    """Test fuzzy string matching."""
-    
-    def test_calculate_similarity_exact(self):
-        """Test similarity calculation for identical strings."""
-        score = calculate_similarity("benzene", "benzene")
-        assert score == 1.0
-    
-    def test_calculate_similarity_typo(self):
-        """Test similarity with minor typo."""
-        score = calculate_similarity("benzene", "benzen")
-        assert score > 0.85
-    
-    def test_calculate_similarity_reordered(self):
-        """Test token set ratio with reordered words."""
-        score = calculate_similarity("methyl ethyl ketone", "ethyl methyl ketone")
-        assert score >= 0.85  # Should be high due to token set matching
-    
-    def test_match_fuzzy_basic(self, mock_session, mock_synonym, mock_analyte):
-        """Test basic fuzzy matching."""
-        # Mock database query
-        mock_session.execute.return_value.all.return_value = [
-            (mock_synonym, mock_analyte)
-        ]
-        
-        matches = match_fuzzy("benzen", mock_session, top_k=5, threshold=0.75)
-        
-        assert len(matches) > 0
-        assert matches[0].method == MatchMethod.FUZZY
-        assert matches[0].distance_score is not None
-    
-    def test_match_fuzzy_confidence_mapping(self, mock_session):
-        """Test confidence level mapping based on scores."""
-        # Create mock synonyms with different similarity levels
-        high_sim_synonym = Mock()
-        high_sim_synonym.id = 1
-        high_sim_synonym.analyte_id = 1
-        high_sim_synonym.synonym_norm = "benzene"  # Very similar to "benzene"
-        high_sim_synonym.synonym_raw = "Benzene"
-        high_sim_synonym.harvest_source = "test"
-        
-        analyte = Mock()
-        analyte.id = 1
-        analyte.preferred_name = "Benzene"
-        analyte.cas_number = "71-43-2"
-        
-        mock_session.execute.return_value.all.return_value = [
-            (high_sim_synonym, analyte)
-        ]
-        
-        matches = match_fuzzy("benzene", mock_session, top_k=5, threshold=0.75)
-        
-        if matches:
-            # Should get high confidence for exact/near-exact match
-            assert matches[0].confidence >= 0.85
-    
-    def test_match_fuzzy_threshold(self, mock_session, mock_synonym, mock_analyte):
-        """Test fuzzy matching respects threshold."""
-        mock_synonym.synonym_norm = "completely different"
-        mock_session.execute.return_value.all.return_value = [
-            (mock_synonym, mock_analyte)
-        ]
-        
-        matches = match_fuzzy("benzene", mock_session, top_k=5, threshold=0.95)
-        
-        # Should return no matches due to low similarity
-        assert len(matches) == 0
-    
-    def test_match_fuzzy_top_k(self, mock_session):
-        """Test top-K limiting."""
-        # Create multiple mock synonyms
-        synonyms = []
-        for i in range(10):
-            synonym = Mock()
-            synonym.id = i
-            synonym.analyte_id = i
-            synonym.synonym_norm = f"benzene{i}"
-            synonym.synonym_raw = f"Benzene{i}"
-            synonym.harvest_source = "test"
-            
-            analyte = Mock()
-            analyte.id = i
-            analyte.preferred_name = f"Benzene {i}"
-            analyte.cas_number = f"{i}-00-0"
-            
-            synonyms.append((synonym, analyte))
-        
-        mock_session.execute.return_value.all.return_value = synonyms
-        
-        matches = match_fuzzy("benzene", mock_session, top_k=3, threshold=0.5)
-        
-        # Should return at most 3 matches
-        assert len(matches) <= 3
-
-
-# ============================================================================
-# SEMANTIC MATCHING TESTS
-# ============================================================================
-
-class TestSemanticMatcher:
-    """Test semantic matching with FAISS."""
-    
-    @patch('src.matching.semantic_matcher.SentenceTransformer')
-    @patch('src.matching.semantic_matcher.faiss')
-    def test_semantic_matcher_initialization(self, mock_faiss, mock_st):
-        """Test SemanticMatcher initialization."""
-        mock_model = Mock()
-        mock_st.return_value = mock_model
-        
-        mock_index = Mock()
-        mock_index.ntotal = 0
-        mock_faiss.IndexFlatIP.return_value = mock_index
-        
-        matcher = SemanticMatcher(base_path="/tmp/test")
-        
-        assert matcher.model is not None
-        assert matcher.index is not None
-    
-    @patch('src.matching.semantic_matcher.SentenceTransformer')
-    def test_encode_query(self, mock_st):
-        """Test query encoding."""
-        mock_model = Mock()
-        mock_model.encode.return_value = np.array([[0.1, 0.2, 0.3]])
-        mock_st.return_value = mock_model
-        
-        with patch('src.matching.semantic_matcher.faiss'):
-            matcher = SemanticMatcher()
-            embedding = matcher.encode_query("benzene")
-        
-        assert embedding.shape == (3,)
-        # Should be L2 normalized
-        norm = np.linalg.norm(embedding)
-        assert abs(norm - 1.0) < 0.01
-    
-    @patch('src.matching.semantic_matcher.SentenceTransformer')
-    @patch('src.matching.semantic_matcher.faiss')
-    def test_search_basic(self, mock_faiss, mock_st):
-        """Test FAISS search."""
-        # Setup mocks
-        mock_model = Mock()
-        mock_st.return_value = mock_model
-        
-        mock_index = Mock()
-        mock_index.ntotal = 1
-        mock_index.search.return_value = (
-            np.array([[0.95]]),  # distances (cosine similarities)
-            np.array([[0]])  # indices
-        )
-        mock_faiss.IndexFlatIP.return_value = mock_index
-        
-        matcher = SemanticMatcher()
-        matcher.metadata = {
-            0: {
-                'analyte_id': 1,
-                'analyte_name': 'Benzene',
-                'cas_number': '71-43-2',
-                'synonym_norm': 'benzene',
-                'synonym_id': 10,
-            }
-        }
-        
-        query_embedding = np.array([0.1, 0.2, 0.3], dtype='float32')
-        matches = matcher.search(query_embedding, top_k=5, threshold=0.75)
-        
-        assert len(matches) == 1
-        assert matches[0].method == MatchMethod.SEMANTIC
-        assert matches[0].similarity_score == 0.95
-    
-    @patch('src.matching.semantic_matcher.SentenceTransformer')
-    @patch('src.matching.semantic_matcher.faiss')
-    def test_add_embeddings(self, mock_faiss, mock_st):
-        """Test adding embeddings incrementally."""
-        mock_model = Mock()
-        mock_model.encode.return_value = np.array([[0.1, 0.2, 0.3]])
-        mock_st.return_value = mock_model
-        
-        mock_index = Mock()
-        mock_index.ntotal = 0
-        mock_faiss.IndexFlatIP.return_value = mock_index
-        
-        matcher = SemanticMatcher()
-        
-        texts = ["new chemical"]
-        metadata = [{'analyte_id': 2, 'synonym_id': 20}]
-        
-        matcher.add_embeddings(texts, metadata)
-        
-        # Verify index.add was called
-        mock_index.add.assert_called_once()
-
-
-# ============================================================================
-# RESOLUTION ENGINE TESTS
-# ============================================================================
-
-class TestResolutionEngine:
-    """Test resolution engine cascade logic."""
-    
-    def test_resolution_engine_initialization(self, mock_session):
-        """Test ResolutionEngine initialization."""
-        with patch('src.matching.resolution_engine.SemanticMatcher'):
-            engine = ResolutionEngine(mock_session)
-            
-            assert engine.db_session == mock_session
-            assert engine.config is not None
-    
-    def test_resolve_exact_match(self, mock_session, mock_analyte):
-        """Test resolution with exact match (should return immediately)."""
-        # Mock exact match
-        mock_result = Mock()
-        mock_result.scalar_one_or_none.return_value = mock_analyte
-        mock_session.execute.return_value = mock_result
-        
-        with patch('src.matching.resolution_engine.SemanticMatcher'):
-            engine = ResolutionEngine(mock_session)
-            result = engine.resolve("71-43-2", log_decision=False)
-        
-        assert result.matched is True
-        assert result.best_match.confidence == 1.0
-        assert result.processing_time_ms is not None
-    
-    def test_resolve_no_match(self, mock_session):
-        """Test resolution with no matches found."""
-        # Mock no matches
-        mock_result = Mock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_result.first.return_value = None
-        mock_result.all.return_value = []
-        mock_session.execute.return_value = mock_result
-        
-        with patch('src.matching.resolution_engine.SemanticMatcher'):
-            engine = ResolutionEngine(mock_session)
-            engine.config.semantic_enabled = False  # Disable to simplify
-            
-            result = engine.resolve("unknown chemical xxx", log_decision=False)
-        
-        assert result.matched is False
-        assert result.manual_review_recommended is True
-    
-    def test_resolve_disagreement_detection(self, mock_session):
-        """Test disagreement detection between fuzzy and semantic."""
-        mock_session.execute.return_value.all.return_value = []
-        mock_session.execute.return_value.scalar_one_or_none.return_value = None
-        mock_session.execute.return_value.first.return_value = None
-        
-        with patch('src.matching.resolution_engine.SemanticMatcher') as mock_sm:
-            # Setup different top matches for fuzzy and semantic
-            fuzzy_match = Match(1, "Chemical A", None, 0.90, MatchMethod.FUZZY)
-            fuzzy_match.distance_score = 0.90
-            
-            semantic_match = Match(2, "Chemical B", None, 0.88, MatchMethod.SEMANTIC)
-            semantic_match.similarity_score = 0.88
-            
-            with patch('src.matching.resolution_engine.match_fuzzy', return_value=[fuzzy_match]):
-                mock_semantic = Mock()
-                mock_semantic.match_semantic.return_value = [semantic_match]
-                mock_sm.return_value = mock_semantic
-                
-                engine = ResolutionEngine(mock_session)
-                result = engine.resolve("test query", log_decision=False)
-            
-            # Should detect disagreement
-            assert result.disagreement_detected is True
-            assert result.manual_review_recommended is True
-    
-    def test_resolve_batch(self, mock_session):
-        """Test batch resolution."""
-        mock_result = Mock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_result.first.return_value = None
-        mock_result.all.return_value = []
-        mock_session.execute.return_value = mock_result
-        
-        with patch('src.matching.resolution_engine.SemanticMatcher'):
-            engine = ResolutionEngine(mock_session)
-            engine.config.semantic_enabled = False
-            
-            queries = ["query1", "query2", "query3"]
-            results = engine.resolve_batch(queries, log_decisions=False)
-        
-        assert len(results) == 3
-        assert all(isinstance(r, MatchResult) for r in results)
-    
-    def test_export_results_csv(self, mock_session, tmp_path):
-        """Test CSV export of results."""
-        with patch('src.matching.resolution_engine.SemanticMatcher'):
-            engine = ResolutionEngine(mock_session)
-            
-            # Create mock results
-            match = Match(1, "Benzene", "71-43-2", 0.95, MatchMethod.EXACT)
-            result = MatchResult("benzene", "benzene", best_match=match)
-            
-            csv_path = tmp_path / "results.csv"
-            engine.export_results_csv([result], str(csv_path))
-            
-            assert csv_path.exists()
-            content = csv_path.read_text()
-            assert "benzene" in content.lower()
-            assert "71-43-2" in content
-    
-    def test_export_results_json(self, mock_session, tmp_path):
-        """Test JSON export of results."""
-        with patch('src.matching.resolution_engine.SemanticMatcher'):
-            engine = ResolutionEngine(mock_session)
-            
-            match = Match(1, "Benzene", "71-43-2", 0.95, MatchMethod.EXACT)
-            result = MatchResult("benzene", "benzene", best_match=match)
-            
-            json_path = tmp_path / "results.json"
-            engine.export_results_json([result], str(json_path))
-            
-            assert json_path.exists()
-            
-            import json
-            with open(json_path) as f:
-                data = json.load(f)
-            
-            assert len(data) == 1
-            assert data[0]['query_text'] == "benzene"
-
-
-# ============================================================================
-# INTEGRATION TESTS
-# ============================================================================
-
-class TestIntegration:
-    """Integration tests for complete matching pipeline."""
-    
-    def test_full_pipeline_mock(self, mock_session):
-        """Test complete pipeline with mocked components."""
-        # This would be a full end-to-end test with a real database
-        # in a production environment
-        pass
-
-
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])

@@ -59,6 +59,8 @@ def run_baseline():
         'confidences': [],
         'margins': [],
         'signals': defaultdict(int),
+        'misses': [],       # (sub_id, filename, chemical_raw, predicted_id, predicted_name, ground_truth, confidence, margin, method)
+        'review_items': [], # same shape — items in REVIEW band
     }
     
     file_results = []
@@ -122,15 +124,29 @@ def run_baseline():
                 
                 # Check correctness
                 predicted_id = result.best_match.analyte_id if result.best_match else None
+                predicted_name = result.best_match.preferred_name if result.best_match else None
+                method = result.best_match.method if result.best_match else None
+                confidence = result.best_match.confidence if result.best_match else 0.0
                 is_correct = (predicted_id == ground_truth)
                 if is_correct:
                     file_stats['correct'] += 1
+                else:
+                    overall_stats['misses'].append((
+                        sub_id, filename, chemical_raw,
+                        predicted_id, predicted_name, ground_truth,
+                        confidence, result.margin, method
+                    ))
                 
                 # Band classification
                 if result.confidence_band == "AUTO_ACCEPT":
                     file_stats['auto_accept'] += 1
                 elif result.confidence_band == "REVIEW":
                     file_stats['review'] += 1
+                    overall_stats['review_items'].append((
+                        sub_id, filename, chemical_raw,
+                        predicted_id, predicted_name, ground_truth,
+                        confidence, result.margin, method, is_correct
+                    ))
                 else:
                     file_stats['unknown'] += 1
                 
@@ -240,6 +256,41 @@ def run_baseline():
     print(f"\n  New signals: margin (μ={mean_m:.4f}), semantic_match={overall_stats['signals'].get('semantic_match', 0)} items")
     print(f"  Config loaded from: config/learning_config.yaml")
     print(f"  Thresholds: auto_accept=0.93, review=0.75, disagreement_cap=0.84")
+    
+    # ── Detail: MISSES ────────────────────────────────────────────────────
+    misses = overall_stats['misses']
+    if misses:
+        print(f"\n{'=' * 80}")
+        print(f"MISSES DETAIL  ({len(misses)} items)")
+        print(f"{'=' * 80}")
+        print(f"  {'Sub':>4}  {'Chemical Raw':<40}  {'Predicted':<20}  {'Ground Truth':<20}  {'Conf':>5}  {'Margin':>6}  {'Method':<15}")
+        print(f"  {'─'*4}  {'─'*40}  {'─'*20}  {'─'*20}  {'─'*5}  {'─'*6}  {'─'*15}")
+        for m in misses:
+            sub_id_m, fname_m, chem_raw, pred_id, pred_name, gt, conf, margin, meth = m
+            chem_trunc = chem_raw[:40] if chem_raw else ''
+            pred_trunc = (pred_name or pred_id or 'None')[:20]
+            gt_trunc = (gt or 'None')[:20]
+            print(f"  {sub_id_m:>4}  {chem_trunc:<40}  {pred_trunc:<20}  {gt_trunc:<20}  {conf:5.3f}  {margin:6.4f}  {meth or 'none':<15}")
+    else:
+        print(f"\n  ✓ No misses — 100% accuracy!")
+    
+    # ── Detail: REVIEW BAND ───────────────────────────────────────────────
+    review_items = overall_stats['review_items']
+    if review_items:
+        print(f"\n{'=' * 80}")
+        print(f"REVIEW BAND DETAIL  ({len(review_items)} items)")
+        print(f"{'=' * 80}")
+        print(f"  {'Sub':>4}  {'Chemical Raw':<40}  {'Predicted':<20}  {'Ground Truth':<20}  {'Conf':>5}  {'Margin':>6}  {'OK?':>3}  {'Method':<15}")
+        print(f"  {'─'*4}  {'─'*40}  {'─'*20}  {'─'*20}  {'─'*5}  {'─'*6}  {'─'*3}  {'─'*15}")
+        for r in review_items:
+            sub_id_r, fname_r, chem_raw, pred_id, pred_name, gt, conf, margin, meth, ok = r
+            chem_trunc = chem_raw[:40] if chem_raw else ''
+            pred_trunc = (pred_name or pred_id or 'None')[:20]
+            gt_trunc = (gt or 'None')[:20]
+            ok_str = "Y" if ok else "N"
+            print(f"  {sub_id_r:>4}  {chem_trunc:<40}  {pred_trunc:<20}  {gt_trunc:<20}  {conf:5.3f}  {margin:6.4f}  {ok_str:>3}  {meth or 'none':<15}")
+    else:
+        print(f"\n  ✓ No items in REVIEW band.")
 
 
 if __name__ == "__main__":

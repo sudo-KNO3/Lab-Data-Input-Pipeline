@@ -23,6 +23,7 @@ from .models import (
     EmbeddingsMetadata as EmbeddingMetadata,
     APIHarvestMetadata as ApiHarvestMetadata,
     SnapshotRegistry,
+    AnalyteType,
 )
 
 
@@ -32,51 +33,59 @@ from .models import (
 
 def create_analyte(
     session: Session,
-    cas_number: Optional[str],
+    analyte_id: str,
     preferred_name: str,
     analyte_type: str,
-    iupac_name: Optional[str] = None,
+    cas_number: Optional[str] = None,
     molecular_formula: Optional[str] = None,
-    molecular_weight: Optional[float] = None,
     smiles: Optional[str] = None,
-    inchi: Optional[str] = None,
     inchi_key: Optional[str] = None,
-    reg153_category: Optional[str] = None,
-    notes: Optional[str] = None,
+    group_code: Optional[str] = None,
+    table_number: Optional[int] = None,
+    chemical_group: Optional[str] = None,
 ) -> Analyte:
     """
     Create a new analyte.
     
     Args:
         session: Database session
-        cas_number: CAS registry number (can be None for fractions/groups)
+        analyte_id: Primary key (e.g. 'REG153_VOCS_001')
         preferred_name: Official analyte name
         analyte_type: One of: single_substance, fraction_or_group, suite, parameter
-        ... (additional optional fields)
+        cas_number: CAS registry number (can be None for fractions/groups)
+        molecular_formula: Molecular formula
+        smiles: SMILES string
+        inchi_key: InChI key
+        group_code: Group code
+        table_number: Reg 153 table number
+        chemical_group: Chemical group
     
     Returns:
         Created Analyte instance
     """
+    # Convert string to AnalyteType enum if needed
+    if isinstance(analyte_type, str):
+        analyte_type = AnalyteType(analyte_type)
+    
     analyte = Analyte(
+        analyte_id=analyte_id,
         cas_number=cas_number,
         preferred_name=preferred_name,
-        iupac_name=iupac_name,
         analyte_type=analyte_type,
         molecular_formula=molecular_formula,
-        molecular_weight=molecular_weight,
         smiles=smiles,
-        inchi=inchi,
         inchi_key=inchi_key,
-        reg153_category=reg153_category,
-        notes=notes,
+        group_code=group_code,
+        table_number=table_number,
+        chemical_group=chemical_group,
     )
     session.add(analyte)
     session.flush()
     return analyte
 
 
-def get_analyte_by_id(session: Session, analyte_id: int) -> Optional[Analyte]:
-    """Get analyte by ID."""
+def get_analyte_by_id(session: Session, analyte_id: str) -> Optional[Analyte]:
+    """Get analyte by primary key (analyte_id string)."""
     return session.get(Analyte, analyte_id)
 
 
@@ -114,10 +123,7 @@ def search_analytes_by_name(
     return session.execute(
         select(Analyte)
         .where(
-            or_(
-                Analyte.preferred_name.ilike(search_pattern),
-                Analyte.iupac_name.ilike(search_pattern),
-            )
+            Analyte.preferred_name.ilike(search_pattern)
         )
         .limit(limit)
     ).scalars().all()
@@ -153,7 +159,7 @@ def list_analytes(
 
 def update_analyte(
     session: Session,
-    analyte_id: int,
+    analyte_id: str,
     **kwargs
 ) -> Optional[Analyte]:
     """
@@ -180,13 +186,13 @@ def update_analyte(
     return analyte
 
 
-def delete_analyte(session: Session, analyte_id: int) -> bool:
+def delete_analyte(session: Session, analyte_id: str) -> bool:
     """
     Delete an analyte and all related records (cascade).
     
     Args:
         session: Database session
-        analyte_id: ID of analyte to delete
+        analyte_id: Primary key string (e.g. 'REG153_VOCS_001')
     
     Returns:
         True if deleted, False if not found
@@ -202,8 +208,11 @@ def delete_analyte(session: Session, analyte_id: int) -> bool:
 
 def count_analytes(session: Session, analyte_type: Optional[str] = None) -> int:
     """Count total analytes, optionally filtered by type."""
-    stmt = select(func.count(Analyte.id))
+    stmt = select(func.count(Analyte.analyte_id))
     if analyte_type:
+        # Convert string to AnalyteType enum if needed
+        if isinstance(analyte_type, str):
+            analyte_type = AnalyteType(analyte_type)
         stmt = stmt.where(Analyte.analyte_type == analyte_type)
     return session.execute(stmt).scalar_one()
 
@@ -214,35 +223,40 @@ def count_analytes(session: Session, analyte_type: Optional[str] = None) -> int:
 
 def create_synonym(
     session: Session,
-    analyte_id: int,
+    analyte_id: str,
     synonym_raw: str,
     synonym_norm: str,
     harvest_source: str,
     confidence: float = 1.0,
-    language: str = "en",
+    synonym_type: str = "common",
 ) -> Synonym:
     """
     Create a new synonym.
     
     Args:
         session: Database session
-        analyte_id: Foreign key to analyte
+        analyte_id: Foreign key to analyte (string PK)
         synonym_raw: Raw synonym text
         synonym_norm: Normalized synonym text
         harvest_source: Source of synonym (e.g., 'pubchem', 'manual')
         confidence: Confidence score (0.0 to 1.0)
-        language: Language code
+        synonym_type: Type of synonym (iupac, common, abbreviation, etc.)
     
     Returns:
         Created Synonym instance
     """
+    from .models import SynonymType as ST
+    # Convert string to SynonymType enum if needed
+    if isinstance(synonym_type, str):
+        synonym_type = ST(synonym_type)
+    
     synonym = Synonym(
         analyte_id=analyte_id,
         synonym_raw=synonym_raw,
         synonym_norm=synonym_norm,
+        synonym_type=synonym_type,
         harvest_source=harvest_source,
         confidence=confidence,
-        language=language,
     )
     session.add(synonym)
     session.flush()
@@ -692,46 +706,45 @@ def count_todays_global_synonyms(
 
 def create_match_decision(
     session: Session,
-    query_text: str,
-    query_norm: str,
-    analyte_id: Optional[int],
+    input_text: str,
+    matched_analyte_id: Optional[str],
+    match_method: str,
     confidence_score: float,
     top_k_candidates: Dict[str, Any],
     signals_used: Dict[str, Any],
     corpus_snapshot_hash: str,
     model_hash: str,
-    embedding_model_name: Optional[str] = None,
     disagreement_flag: bool = False,
+    # Legacy kwargs (accepted but ignored for backward compatibility)
+    **kwargs,
 ) -> MatchDecision:
     """
     Record a match decision for audit trail.
     
     Args:
         session: Database session
-        query_text: Original query text
-        query_norm: Normalized query text
-        analyte_id: Matched analyte ID (None if no confident match)
+        input_text: Original input text
+        matched_analyte_id: Matched analyte ID (None if no confident match)
+        match_method: Method used (exact, fuzzy, semantic, cas_extracted, hybrid)
         confidence_score: Overall confidence score
         top_k_candidates: JSON of top-k candidate matches
         signals_used: JSON of signal contributions
         corpus_snapshot_hash: Version hash of corpus used
         model_hash: Version hash of model used
-        embedding_model_name: Name of embedding model
         disagreement_flag: True if signals disagree
     
     Returns:
         Created MatchDecision instance
     """
     decision = MatchDecision(
-        query_text=query_text,
-        query_norm=query_norm,
-        analyte_id=analyte_id,
+        input_text=input_text,
+        matched_analyte_id=matched_analyte_id,
+        match_method=match_method,
         confidence_score=confidence_score,
         top_k_candidates=top_k_candidates,
         signals_used=signals_used,
         corpus_snapshot_hash=corpus_snapshot_hash,
         model_hash=model_hash,
-        embedding_model_name=embedding_model_name,
         disagreement_flag=disagreement_flag,
     )
     session.add(decision)
@@ -1186,7 +1199,7 @@ def get_all_synonyms_for_corpus(
             Synonym.synonym_norm,
             Analyte.preferred_name
         )
-        .join(Analyte, Synonym.analyte_id == Analyte.id)
+        .join(Analyte, Synonym.analyte_id == Analyte.analyte_id)
         .where(Synonym.confidence >= min_confidence)
         .order_by(Synonym.analyte_id)
     ).all()

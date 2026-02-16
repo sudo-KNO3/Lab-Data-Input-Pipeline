@@ -184,12 +184,22 @@ def step_status(args, logger) -> bool:
     return True
 
 
+def step_export(args, logger) -> bool:
+    """Export matched results to formatted Excel."""
+    extra = ["--all"]
+    ts = datetime.now().strftime("%Y%m%d")
+    out = project_root / "reports" / "exports" / f"all_results_{ts}.xlsx"
+    extra.extend(["--output", str(out)])
+    return _run_script("scripts/40_export_results.py", extra, logger)
+
+
 def step_full(args, logger) -> bool:
     """Run all pipeline steps in sequence."""
     steps = [
         ("INGEST", step_ingest),
         ("LEARN", step_learn),
         ("EMBED", step_embed),
+        ("EXPORT", step_export),
         ("STATUS", step_status),
     ]
 
@@ -246,6 +256,10 @@ def main():
     # embed
     sub.add_parser("embed", help="Rebuild FAISS semantic index")
 
+    # export
+    p_export = sub.add_parser("export", help="Export results to formatted Excel")
+    p_export.add_argument("--submission-id", type=int, help="Export single submission")
+
     # status
     sub.add_parser("status", help="Print system health summary")
 
@@ -264,6 +278,7 @@ def main():
         "learn": step_learn,
         "calibrate": step_calibrate,
         "embed": step_embed,
+        "export": step_export,
         "status": step_status,
         "full": step_full,
     }

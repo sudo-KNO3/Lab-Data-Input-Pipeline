@@ -28,6 +28,50 @@ from src.matching.resolution_engine import ResolutionEngine
 
 
 # ============================================================================
+# NORMALIZATION ASSERTION HELPER
+# ============================================================================
+
+def assert_normalized_equal(actual: str, expected: str, *, msg: str = ""):
+    """
+    Assert two strings are equal after collapsing syllable-tokenized spaces.
+    
+    The TextNormalizer produces syllable-tokenized output (e.g. "be nz ene").
+    This helper compares strings after removing intra-token spaces, so tests
+    don't encode implementation-specific tokenization boundaries.
+    
+    If tokenization rules change, update this ONE function — not 50 tests.
+    
+    Args:
+        actual: Output from TextNormalizer.normalize()
+        expected: Expected normalized form (collapsed, e.g. "benzene")
+        msg: Optional failure message context
+    """
+    collapsed_actual = actual.replace(" ", "")
+    collapsed_expected = expected.replace(" ", "")
+    assert collapsed_actual == collapsed_expected, (
+        f"Normalized mismatch{' (' + msg + ')' if msg else ''}: "
+        f"got '{actual}' (collapsed: '{collapsed_actual}'), "
+        f"expected '{expected}' (collapsed: '{collapsed_expected}')"
+    )
+
+
+def assert_normalized_contains(actual: str, expected_substring: str, *, msg: str = ""):
+    """
+    Assert that collapsed normalized output contains a substring.
+    
+    Args:
+        actual: Output from TextNormalizer.normalize()
+        expected_substring: Substring expected in collapsed form
+        msg: Optional failure message context  
+    """
+    collapsed = actual.replace(" ", "")
+    assert expected_substring in collapsed, (
+        f"Normalized substring not found{' (' + msg + ')' if msg else ''}: "
+        f"'{expected_substring}' not in '{actual}' (collapsed: '{collapsed}')"
+    )
+
+
+# ============================================================================
 # DATABASE FIXTURES
 # ============================================================================
 

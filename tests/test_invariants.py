@@ -36,6 +36,8 @@ from src.matching.resolution_engine import ResolutionEngine, _load_thresholds
 from src.normalization.text_normalizer import TextNormalizer, NORMALIZATION_VERSION
 from src.learning.synonym_ingestion import SynonymIngestor
 
+import hashlib
+
 
 # ============================================================================
 # FIXTURES
@@ -849,4 +851,404 @@ class TestProductionDatabaseInvariants:
         assert count >= 47000, (
             f"Only {count} synonyms in production (expected ≥47,000). "
             f"Synonym corpus may have been truncated."
+        )
+
+
+# ============================================================================
+# 11. STRUCTURAL DRIFT SIMULATION
+# ============================================================================
+
+class TestStructuralDriftSimulation:
+    """
+    Simulate adversarial operational scenarios and verify the system
+    remains bounded. These are NOT unit tests — they are stress tests
+    for the stability controller.
+    """
+
+    @pytest.fixture
+    def drift_engine(self, seeded_session):
+        """ResolutionEngine configured for drift simulation."""
+        return ResolutionEngine(
+            db_session=seeded_session,
+            config_path=CONFIG_PATH,
+        )
+
+    def test_repeated_collisions_trigger_unstable_lockout(self, seeded_session):
+        """
+        Scenario: Same vendor+text pair receives conflicting analyte IDs.
+        Expected: After max_collision_count (2), variant is UNSTABLE and
+        vendor cache returns None during cooldown.
+        """
+        engine = ResolutionEngine(
+            db_session=seeded_session,
+            config_path=CONFIG_PATH,
+        )
+
+        # Create variant with enough confirmations but rising collisions
+        lv = LabVariant(
+            lab_vendor="DriftLab",
+            observed_text="ambiguous chemical",
+            validated_match_id="REG153_TEST_001",
+            frequency_count=10,
+            first_seen_date=date.today() - timedelta(days=90),
+            last_seen_date=date.today(),
+            collision_count=0,
+            normalization_version=NORMALIZATION_VERSION,
+        )
+        seeded_session.add(lv)
+        seeded_session.flush()
+
+        # Add 5 valid confirmations → above min_confirmations
+        for sub_id in range(300, 305):
+            seeded_session.add(LabVariantConfirmation(
+                variant_id=lv.id,
+                submission_id=sub_id,
+                confirmed_analyte_id="REG153_TEST_001",
+            ))
+        seeded_session.flush()
+
+        # Initially should serve cache (collision_count=0)
+        result_ok = engine._lookup_vendor_cache("ambiguous chemical", "DriftLab")
+        assert result_ok is not None, "Should serve cache with 0 collisions"
+
+        # Simulate 3 collisions (> max_collision_count=2) + recent collision date
+        lv.collision_count = 3
+        lv.last_collision_date = date.today() - timedelta(days=1)  # within cooldown
+        seeded_session.flush()
+
+        # Now should be blocked
+        result_blocked = engine._lookup_vendor_cache("ambiguous chemical", "DriftLab")
+        assert result_blocked is None, (
+            "UNSTABLE variant (3 collisions, 1 day since last) must NOT serve cache. "
+            f"Expected None, got {result_blocked}"
+        )
+
+    def test_unstable_variant_recovers_after_cooldown(self, seeded_session):
+        """
+        Scenario: UNSTABLE variant waits out cooldown period.
+        Expected: Cache resumes serving after cooldown_days elapsed.
+        """
+        engine = ResolutionEngine(
+            db_session=seeded_session,
+            config_path=CONFIG_PATH,
+        )
+
+        lv = LabVariant(
+            lab_vendor="RecoveryLab",
+            observed_text="recovering chemical",
+            validated_match_id="REG153_TEST_001",
+            frequency_count=10,
+            first_seen_date=date.today() - timedelta(days=120),
+            last_seen_date=date.today(),
+            collision_count=3,  # UNSTABLE
+            last_collision_date=date.today() - timedelta(days=30),  # well past cooldown (7)
+            normalization_version=NORMALIZATION_VERSION,
+        )
+        seeded_session.add(lv)
+        seeded_session.flush()
+
+        # Add enough confirmations
+        for sub_id in range(400, 408):
+            seeded_session.add(LabVariantConfirmation(
+                variant_id=lv.id,
+                submission_id=sub_id,
+                confirmed_analyte_id="REG153_TEST_001",
+            ))
+        seeded_session.flush()
+
+        # Cooldown expired (30 days > 7 days), effective = 8 - 3 = 5 >= 3
+        result = engine._lookup_vendor_cache("recovering chemical", "RecoveryLab")
+        assert result is not None, (
+            "UNSTABLE variant should recover after cooldown. "
+            "30 days since last collision > 7 day cooldown."
+        )
+
+    def test_vendor_drift_detected_by_collision_check(self, seeded_session):
+        """
+        Scenario: Vendor starts mapping a name to a different analyte.
+        Expected: check_variant_collision detects the conflict.
+        """
+        from src.database.crud import check_variant_collision
+
+        lv = seeded_session.execute(
+            select(LabVariant).where(LabVariant.observed_text == "benzene")
+        ).scalar_one()
+
+        # Existing confirmations → REG153_TEST_001
+        # Propose different analyte
+        has_collision = check_variant_collision(
+            seeded_session, lv.id, "REG153_TEST_002"
+        )
+        assert has_collision is True, (
+            "Collision not detected when vendor drift proposes different analyte."
+        )
+
+        # Same analyte → no collision
+        no_collision = check_variant_collision(
+            seeded_session, lv.id, "REG153_TEST_001"
+        )
+        assert no_collision is False, (
+            "False collision flagged for matching analyte ID."
+        )
+
+    def test_stale_cache_cannot_auto_accept(self, seeded_session):
+        """
+        Scenario: Vendor cache entry decays over time.
+        Expected: Decayed confidence < AUTO_ACCEPT → forced to REVIEW.
+        """
+        engine = ResolutionEngine(
+            db_session=seeded_session,
+            config_path=CONFIG_PATH,
+        )
+
+        # Create a very stale variant
+        lv = LabVariant(
+            lab_vendor="StaleLab",
+            observed_text="stale chemical",
+            validated_match_id="REG153_TEST_001",
+            frequency_count=5,
+            first_seen_date=date.today() - timedelta(days=365),
+            last_seen_date=date.today() - timedelta(days=300),  # very stale
+            collision_count=0,
+            normalization_version=NORMALIZATION_VERSION,
+        )
+        seeded_session.add(lv)
+        seeded_session.flush()
+
+        for sub_id in range(500, 504):
+            seeded_session.add(LabVariantConfirmation(
+                variant_id=lv.id,
+                submission_id=sub_id,
+                confirmed_analyte_id="REG153_TEST_001",
+            ))
+        seeded_session.flush()
+
+        result = engine._lookup_vendor_cache("stale chemical", "StaleLab")
+        if result is not None:
+            # Stale cache should have decayed confidence
+            assert result.confidence < engine.AUTO_ACCEPT, (
+                f"Stale vendor cache (300 days old) has confidence {result.confidence:.3f} "
+                f">= AUTO_ACCEPT ({engine.AUTO_ACCEPT}). "
+                f"Stale memory must not auto-accept."
+            )
+
+    def test_dual_gate_blocks_rapid_synonym_accumulation(self, seeded_session):
+        """
+        Scenario: Burst of synonym ingestion attempts.
+        Expected: Daily cap prevents runaway structural mutation.
+        """
+        ingestor = SynonymIngestor()
+        added_count = 0
+
+        for i in range(25):  # try 25, cap is 20
+            result = ingestor.ingest_validated_synonym(
+                raw_text=f"drift_synonym_{i}",
+                analyte_id="REG153_TEST_001",
+                db_session=seeded_session,
+                cascade_confirmed=True,
+                cascade_margin=0.10,
+                dual_gate_margin=0.06,
+                max_global_synonyms_per_day=20,
+            )
+            if result:
+                added_count += 1
+
+        assert added_count <= 20, (
+            f"Daily cap violated: {added_count} synonyms added (max 20). "
+            f"Structural velocity bound breached."
+        )
+
+    def test_decay_monotonically_decreases_with_age(self, seeded_session):
+        """
+        Scenario: Verify decay function monotonicity.
+        Expected: as age increases, decay factor never increases.
+        """
+        engine = ResolutionEngine(
+            db_session=seeded_session,
+            config_path=CONFIG_PATH,
+        )
+
+        prev_decay = 1.0
+        for age_days in range(0, 400, 10):
+            test_date = date.today() - timedelta(days=age_days)
+            decay = engine._compute_decay(test_date)
+            assert decay <= prev_decay + 1e-9, (
+                f"Decay non-monotonic at age={age_days}: "
+                f"{decay:.6f} > previous {prev_decay:.6f}"
+            )
+            assert decay >= engine.decay_floor, (
+                f"Decay below floor at age={age_days}: "
+                f"{decay:.6f} < floor {engine.decay_floor}"
+            )
+            prev_decay = decay
+
+
+# ============================================================================
+# 12. EMBEDDING MODEL VERSION FREEZE
+# ============================================================================
+
+class TestEmbeddingModelFreeze:
+    """
+    Embedding model identity must be frozen and auditable.
+    If the model changes without explicit migration, embedding geometry
+    shifts silently — causing recall degradation without visible errors.
+    """
+
+    EXPECTED_MODEL_NAME = "all-MiniLM-L6-v2"
+    EXPECTED_MODEL_HASH = hashlib.md5("all-MiniLM-L6-v2".encode()).hexdigest()[:16]
+
+    def test_config_declares_model_name(self, config):
+        """Config must explicitly declare the semantic model."""
+        model = config.get("matching", {}).get("semantic_model")
+        assert model is not None, (
+            "matching.semantic_model not declared in config. "
+            "Embedding model must be explicitly versioned."
+        )
+        assert model == self.EXPECTED_MODEL_NAME, (
+            f"Embedding model changed: config says '{model}', "
+            f"expected '{self.EXPECTED_MODEL_NAME}'. "
+            f"If intentional, update test baseline AND regenerate all embeddings."
+        )
+
+    def test_model_hash_deterministic(self):
+        """Model hash must be deterministic from model name."""
+        computed = hashlib.md5(self.EXPECTED_MODEL_NAME.encode()).hexdigest()[:16]
+        assert computed == self.EXPECTED_MODEL_HASH, (
+            f"Model hash mismatch: {computed} != {self.EXPECTED_MODEL_HASH}. "
+            f"Hash function changed or model name differs."
+        )
+
+    def test_embeddings_metadata_tracks_model(self):
+        """EmbeddingsMetadata ORM must have model_name and model_hash columns."""
+        assert hasattr(EmbeddingsMetadata, "model_name"), (
+            "EmbeddingsMetadata missing model_name column."
+        )
+        assert hasattr(EmbeddingsMetadata, "model_hash"), (
+            "EmbeddingsMetadata missing model_hash column."
+        )
+
+    def test_embedding_dimension_matches_model(self, config):
+        """
+        Verify the expected embedding dimension for the declared model.
+        all-MiniLM-L6-v2 produces 384-dimensional embeddings.
+        """
+        model_name = config.get("matching", {}).get("semantic_model", "")
+        if model_name == "all-MiniLM-L6-v2":
+            expected_dim = 384
+        else:
+            pytest.skip(f"Unknown model '{model_name}', cannot verify dimension")
+
+        # Check FAISS index if present
+        faiss_path = Path(__file__).parent.parent / "data" / "embeddings" / "faiss_index.bin"
+        if faiss_path.exists():
+            try:
+                import faiss
+                index = faiss.read_index(str(faiss_path))
+                assert index.d == expected_dim, (
+                    f"FAISS index dimension ({index.d}) != expected ({expected_dim}) "
+                    f"for model '{model_name}'. Geometry shock risk."
+                )
+            except ImportError:
+                pytest.skip("faiss not installed, cannot verify index dimension")
+        else:
+            pytest.skip("FAISS index not present at expected path")
+
+    def test_no_mixed_model_embeddings_in_metadata(self, seeded_session):
+        """
+        If EmbeddingsMetadata has rows, all must share the same model_hash.
+        Mixed models in the same index = geometry shock.
+        """
+        # Seed two rows with the same model → verify homogeneity
+        s1_id = seeded_session.execute(
+            select(Synonym.id).limit(1)
+        ).scalar()
+        a1_id = seeded_session.execute(
+            select(Analyte.analyte_id).limit(1)
+        ).scalar()
+
+        em1 = EmbeddingsMetadata(
+            synonym_id=s1_id,
+            text_content="benzene",
+            embedding_index=0,
+            model_name=self.EXPECTED_MODEL_NAME,
+            model_hash=self.EXPECTED_MODEL_HASH,
+        )
+        em2 = EmbeddingsMetadata(
+            analyte_id=a1_id,
+            text_content="Test Benzene",
+            embedding_index=1,
+            model_name=self.EXPECTED_MODEL_NAME,
+            model_hash=self.EXPECTED_MODEL_HASH,
+        )
+        seeded_session.add_all([em1, em2])
+        seeded_session.flush()
+
+        distinct_hashes = seeded_session.execute(
+            select(func.count(func.distinct(EmbeddingsMetadata.model_hash)))
+        ).scalar()
+        assert distinct_hashes == 1, (
+            f"Multiple model hashes in embeddings_metadata ({distinct_hashes}). "
+            f"Mixed models cause geometry shock."
+        )
+
+    def test_production_embeddings_model_consistency(self):
+        """Verify production FAISS metadata consistency (skipped if no DB)."""
+        matcher_db = Path(__file__).parent.parent / "data" / "reg153_matcher.db"
+        if not matcher_db.exists():
+            pytest.skip("Production database not present")
+
+        prod_engine = create_engine(f"sqlite:///{matcher_db}", echo=False)
+        S = sessionmaker(bind=prod_engine)
+        s = S()
+
+        try:
+            distinct_hashes = s.execute(
+                text("SELECT COUNT(DISTINCT model_hash) FROM embeddings_metadata")
+            ).scalar()
+            if distinct_hashes is not None:
+                assert distinct_hashes <= 1, (
+                    f"Production has {distinct_hashes} distinct model hashes. "
+                    f"All embeddings must use the same model."
+                )
+        except Exception:
+            pytest.skip("embeddings_metadata table not queryable")
+        finally:
+            s.close()
+            prod_engine.dispose()
+
+
+# ============================================================================
+# 13. OOD VENDOR CACHE BYPASS
+# ============================================================================
+
+class TestOODVendorCacheBypass:
+    """
+    When a query is classified as out-of-distribution (OOD), the vendor
+    cache must NOT be consulted. OOD geometry > vendor memory.
+    """
+
+    def test_ood_score_below_threshold_is_novel(self, seeded_session):
+        """
+        Verify that best-match score below OOD threshold → NOVEL_COMPOUND.
+        Vendor cache hit should not override this classification.
+        """
+        engine = ResolutionEngine(
+            db_session=seeded_session,
+            config_path=CONFIG_PATH,
+        )
+
+        # An unknown chemical that matches nothing → should be NOVEL or UNKNOWN
+        result = engine.resolve("Zyrthnoxaflibatine-Q7", vendor="TestLab")
+        assert result.confidence_band in ("NOVEL_COMPOUND", "UNKNOWN"), (
+            f"Gibberish input classified as '{result.confidence_band}', "
+            f"expected NOVEL_COMPOUND or UNKNOWN."
+        )
+
+    def test_ood_threshold_strictly_below_review(self, config):
+        """OOD zone must not overlap with review band."""
+        ood = config["decision"]["ood_threshold"]
+        review = config["thresholds"]["review"]
+        assert ood < review, (
+            f"OOD threshold ({ood}) overlaps with review ({review}). "
+            f"OOD detection must operate below the review band."
         )

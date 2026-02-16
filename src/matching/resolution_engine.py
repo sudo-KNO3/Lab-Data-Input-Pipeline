@@ -511,7 +511,7 @@ class ResolutionEngine:
         age_ratio = min(1.0, age_days / self.decay_window_days) if self.decay_window_days > 0 else 0.0
         decay_factor = max(self.decay_floor, 1.0 - self.decay_lambda * age_ratio)
         
-        raw_conf = variant.confidence if variant.confidence else 0.95
+        raw_conf = getattr(variant, 'confidence', None) or 0.95
         decayed_conf = raw_conf * decay_factor
         
         # Determine method based on staleness

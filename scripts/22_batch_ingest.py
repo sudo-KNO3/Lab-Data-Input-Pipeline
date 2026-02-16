@@ -26,7 +26,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.database.connection import DatabaseManager
-from src.matching.resolution_engine import ResolutionEngine
+from src.matching import build_engine
 from src.normalization.text_normalizer import TextNormalizer
 from src.extraction import detect_format, extract_chemicals as extract_chemicals_dispatch
 from src.extraction.caduceon import extract_chemicals as extract_ca_chemicals, extract_metadata as extract_ca_metadata
@@ -150,7 +150,7 @@ def ingest_file(
     match_stats = {"high": 0, "medium": 0, "low": 0}
     
     with db_manager.get_session() as session:
-        resolver = ResolutionEngine(session, normalizer)
+        resolver = build_engine(session, normalizer)
         
         for row_num, chem_raw, units, method_or_mac, result_value, sample_id in raw_chemicals:
             chem_norm = normalizer.normalize(chem_raw)

@@ -47,8 +47,8 @@ pip install -r requirements.txt
 # Setup database
 python scripts/setup_database.py
 
-# Extract Reg 153 (or load synthetic data)
-python scripts/01_extract_reg153.py
+# Load synthetic demo data (or connect your own lab data)
+python scripts/generate_synthetic_edds.py
 
 # Bootstrap API synonyms (PubChem + NCI - no auth needed)
 python scripts/04_harvest_api_synonyms.py
@@ -57,7 +57,7 @@ python scripts/04_harvest_api_synonyms.py
 python scripts/09_generate_embeddings.py
 
 # Match chemicals from lab report
-python scripts/12_match_batch_with_learning.py --input lab_data.xlsx --output results.xlsx
+python scripts/22_batch_ingest.py --input lab_data.xlsx
 ```
 
 ## APIs Used (Bootstrap Phase Only)

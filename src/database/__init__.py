@@ -33,6 +33,13 @@ from .connection import (
     init_db,
 )
 
+
+def create_test_db() -> DatabaseManager:
+    """Create an in-memory DatabaseManager for testing."""
+    db = DatabaseManager(db_path=":memory:")
+    db.create_all_tables()
+    return db
+
 from .models import (
     Base,
     Analyte,
@@ -114,6 +121,7 @@ __all__ = [
     "get_session",
     "get_db_manager",
     "init_db",
+    "create_test_db",
     # Models
     "Base",
     "Analyte",

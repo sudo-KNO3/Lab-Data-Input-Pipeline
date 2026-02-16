@@ -70,16 +70,20 @@ class DatabaseManager:
             poolclass = pool.QueuePool
         
         # Create engine
-        self.engine = create_engine(
-            self.database_url,
+        engine_kwargs = dict(
             echo=self.echo,
             connect_args=connect_args,
             poolclass=poolclass,
-            pool_size=pool_size if poolclass != StaticPool else 1,
-            max_overflow=max_overflow if poolclass != StaticPool else 0,
-            pool_timeout=pool_timeout,
-            pool_pre_ping=True,  # Verify connections before using them
         )
+        if poolclass != StaticPool:
+            engine_kwargs.update(
+                pool_size=pool_size,
+                max_overflow=max_overflow,
+                pool_timeout=pool_timeout,
+                pool_pre_ping=True,
+            )
+        
+        self.engine = create_engine(self.database_url, **engine_kwargs)
         
         # Enable foreign key constraints (disabled by default in SQLite)
         self._configure_sqlite()

@@ -6,6 +6,7 @@ resolution cascade logic, and disagreement detection.
 """
 
 import pytest
+from unittest.mock import patch, MagicMock
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 

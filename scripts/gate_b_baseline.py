@@ -22,7 +22,7 @@ from collections import defaultdict
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.database.connection import DatabaseManager
-from src.matching.resolution_engine import ResolutionEngine
+from src.matching import build_engine
 from src.normalization.text_normalizer import TextNormalizer
 
 
@@ -83,7 +83,7 @@ def run_baseline():
                    validation_status, match_confidence, match_method
             FROM lab_results
             WHERE submission_id = ?
-            AND validation_status = 'validated'
+            AND validation_status IN ('validated', 'accepted')
         """, (sub_id,)).fetchall()
         
         if not results:
@@ -103,7 +103,7 @@ def run_baseline():
         }
         
         with db.get_session() as session:
-            engine = ResolutionEngine(db_session=session)
+            engine = build_engine(session)
             
             for row in results:
                 chemical_raw = row['chemical_raw']

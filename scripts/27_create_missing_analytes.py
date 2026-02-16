@@ -10,7 +10,7 @@ from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.database.connection import DatabaseManager
-from src.database.models import Analyte, Synonym
+from src.database.models import Analyte, Synonym, AnalyteType, SynonymType
 from src.normalization.text_normalizer import TextNormalizer
 
 normalizer = TextNormalizer()
@@ -24,7 +24,7 @@ new_analytes = [
     {
         'analyte_id': 'REG153_VOCS_043',
         'preferred_name': 'Trimethylbenzene 1,3,5-',
-        'analyte_type': 'chemical',
+        'analyte_type': AnalyteType.SINGLE_SUBSTANCE,
         'cas_number': '108-67-8',
         'group_code': 'VOCS',
         'table_number': 4,
@@ -40,7 +40,7 @@ new_analytes = [
     {
         'analyte_id': 'REG153_VOCS_044',
         'preferred_name': 'Chloroethane',
-        'analyte_type': 'chemical',
+        'analyte_type': AnalyteType.SINGLE_SUBSTANCE,
         'cas_number': '75-00-3',
         'group_code': 'VOCS',
         'table_number': 4,
@@ -90,7 +90,7 @@ with db.session_scope() as session:
                 analyte_id=a['analyte_id'],
                 synonym_raw=syn_text,
                 synonym_norm=norm,
-                synonym_type='common_name',
+                synonym_type=SynonymType.COMMON,
                 harvest_source='pubchem_verified',
                 confidence=1.0,
             )

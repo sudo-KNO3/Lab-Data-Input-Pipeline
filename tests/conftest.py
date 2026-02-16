@@ -277,8 +277,8 @@ def sample_synonyms(preloaded_analytes: Session) -> Session:
             synonym_raw=syn_raw,
             synonym_norm=syn_norm,
             synonym_type=syn_type,
-            confidence_score=confidence,
-            source='test_fixture',
+            confidence=confidence,
+            harvest_source='test_fixture',
         )
     
     preloaded_analytes.commit()

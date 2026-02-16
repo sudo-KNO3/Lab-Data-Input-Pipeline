@@ -32,18 +32,3 @@ __all__ = [
     "ThresholdCalibrator",
     "VariantClusterer",
 ]
-
-__all__ = [
-    'ingest_validated_synonym',
-    'batch_ingest_validations',
-    'IncrementalEmbedder',
-    'analyze_match_decisions',
-    'find_optimal_threshold',
-    'recalibrate_thresholds',
-    'cluster_similar_unknowns',
-    'detect_typo_groups',
-    'suggest_batch_validation',
-    'calculate_corpus_maturity',
-    'detect_plateau',
-    'should_retrain_model',
-]

@@ -3,7 +3,17 @@ Lab file format detection.
 
 Auto-detects whether an Excel file is Caduceon CA, Eurofins,
 or another supported format by inspecting cell content.
+
+Format vs Vendor distinction:
+  - **Format** describes the spreadsheet *layout* (which extractor to use).
+  - **Vendor** is the actual lab name (who produced the data).
+
+  Format 'caduceon_ca' is used by both SGS and Caduceon (same layout).
+  The vendor is determined separately via OCR on the embedded logo image.
 """
+
+from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 
@@ -11,6 +21,10 @@ import pandas as pd
 def detect_format(df: pd.DataFrame, filename: str) -> str:
     """
     Detect lab file format from content and filename.
+
+    This identifies the *spreadsheet layout* to determine which
+    extraction logic to apply.  It does NOT identify the lab vendor —
+    use :func:`detect_vendor` for that.
 
     Args:
         df: Raw DataFrame read without headers (header=None).
@@ -25,7 +39,8 @@ def detect_format(df: pd.DataFrame, filename: str) -> str:
         if 'eurofins' in cell05.lower():
             return 'eurofins'
 
-    # Caduceon CA: row 6 has "Report No." in col 0
+    # CA-layout: row 6 has "Report No." in col 0
+    # Used by both SGS and older Caduceon — vendor detected via OCR
     if df.shape[0] > 6:
         cell60 = str(df.iloc[6, 0]) if pd.notna(df.iloc[6, 0]) else ''
         if 'report no' in cell60.lower():
@@ -36,3 +51,25 @@ def detect_format(df: pd.DataFrame, filename: str) -> str:
         return 'caduceon_xlsx'
 
     return 'unknown'
+
+
+def detect_vendor(
+    filepath: Path,
+    df: Optional[pd.DataFrame] = None,
+) -> str:
+    """
+    Detect lab vendor by OCR-ing the embedded logo image, with
+    cell-text fallback.
+
+    This is a convenience wrapper around
+    :func:`src.extraction.ocr_vendor.detect_vendor`.
+
+    Args:
+        filepath: Path to the Excel file.
+        df: Optional pre-loaded DataFrame (header=None) for text fallback.
+
+    Returns:
+        Canonical vendor name (e.g. "SGS", "Caduceon", "Eurofins").
+    """
+    from .ocr_vendor import detect_vendor as _ocr_detect
+    return _ocr_detect(filepath, df=df)

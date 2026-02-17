@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.database.connection import DatabaseManager
 from src.matching import build_engine
 from src.normalization.text_normalizer import TextNormalizer
-from src.extraction import detect_format, extract_chemicals as extract_chemicals_dispatch
+from src.extraction import detect_format, detect_vendor, extract_chemicals as extract_chemicals_dispatch
 from src.extraction.caduceon import extract_chemicals as extract_ca_chemicals, extract_metadata as extract_ca_metadata
 from src.extraction.eurofins import extract_chemicals as extract_eurofins_chemicals, extract_metadata as extract_eurofins_metadata
 from src.extraction.filters import is_chemical_row, CA_SKIP_ROWS, FOOTER_PATTERNS
@@ -104,15 +104,11 @@ def ingest_file(
     # Detect format
     fmt = detect_format(df, file_path.name)
     
-    # Auto-detect vendor
+    # Auto-detect vendor via OCR on embedded logo image
     if vendor_override:
         vendor = vendor_override
-    elif fmt == 'eurofins':
-        vendor = 'Eurofins'
-    elif fmt == 'caduceon_ca':
-        vendor = 'Caduceon'
     else:
-        vendor = 'Unknown'
+        vendor = detect_vendor(file_path, df=df)
     
     # Extract chemicals based on format
     if fmt == 'caduceon_ca':
@@ -285,7 +281,7 @@ def main():
             errors += 1
             continue
         
-        vendor = args.vendor or ('Eurofins' if fmt == 'eurofins' else 'Caduceon')
+        vendor = args.vendor or detect_vendor(file_path, df=df_preview)
         
         print(f"\n  [{i}/{len(files)}] {file_path.name}")
         print(f"         Format: {fmt}  Vendor: {vendor}")

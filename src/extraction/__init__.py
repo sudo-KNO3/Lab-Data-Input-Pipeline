@@ -15,10 +15,11 @@ from typing import Dict, List, Tuple
 
 import pandas as pd
 
-from .detector import detect_format
+from .detector import detect_format, detect_vendor
 from .filters import is_chemical_row, CA_SKIP_ROWS, FOOTER_PATTERNS
 from . import caduceon
 from . import eurofins
+from . import ocr_vendor
 
 
 def extract_chemicals(
@@ -65,11 +66,13 @@ def extract_metadata(
 
 __all__ = [
     'detect_format',
+    'detect_vendor',
     'extract_chemicals',
     'extract_metadata',
     'is_chemical_row',
     'caduceon',
     'eurofins',
+    'ocr_vendor',
     'CA_SKIP_ROWS',
     'FOOTER_PATTERNS',
 ]

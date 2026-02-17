@@ -50,6 +50,11 @@ mypy==1.8.0
 # Progress bars
 tqdm==4.66.1
 
+# OCR for lab vendor detection (logo images in Excel files)
+pytesseract>=0.3.10
+olefile>=0.47
+# Requires Tesseract OCR binary: winget install UB-Mannheim.TesseractOCR
+
 # Logging
 loguru==0.7.2
 

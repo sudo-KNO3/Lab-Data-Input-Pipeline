@@ -46,6 +46,49 @@ def get_matcher_conn():
     return sqlite3.connect(MATCHER_DB)
 
 
+def get_file_path(filename: str) -> Path | None:
+    """Look up the archived file_path for a given original_filename."""
+    conn = get_lab_conn()
+    row = conn.execute(
+        "SELECT file_path FROM lab_submissions WHERE original_filename = ? LIMIT 1",
+        (filename,),
+    ).fetchone()
+    conn.close()
+    if row and row[0]:
+        p = PROJECT_ROOT / row[0]
+        return p if p.exists() else None
+    return None
+
+
+def render_file_preview(filename: str, key: str):
+    """Show a preview button for an Excel source file. When clicked, renders the
+    raw spreadsheet contents and a download button inside the review station."""
+    fp = get_file_path(filename)
+    if fp is None:
+        st.caption(f"📄 {filename} (source file not found)")
+        return
+
+    if st.button(f"📄 Preview: {filename}", key=f"preview_{key}"):
+        try:
+            # Read all sheets
+            sheets = pd.read_excel(fp, sheet_name=None, header=None, dtype=str)
+            for sheet_name, sheet_df in sheets.items():
+                st.markdown(f"**Sheet: {sheet_name}** ({len(sheet_df)} rows × {len(sheet_df.columns)} cols)")
+                st.dataframe(sheet_df, width='stretch', hide_index=False, height=400)
+        except Exception as e:
+            st.error(f"Could not read file: {e}")
+
+        # Download button
+        with open(fp, "rb") as f:
+            st.download_button(
+                label=f"⬇️ Download {filename}",
+                data=f.read(),
+                file_name=filename,
+                mime="application/vnd.ms-excel",
+                key=f"download_{key}",
+            )
+
+
 @st.cache_data(ttl=30)
 def load_analytes() -> pd.DataFrame:
     """Load all canonical analytes for the correction dropdown."""
@@ -366,6 +409,7 @@ with tab_pending:
                     st.write(f"**Confidence:** {row['confidence']:.1%}")
                     st.write(f"**Occurrences:** {row['count']} results")
                     st.write(f"**Source file:** {row['sample_file']} ({row['vendor']})")
+                    render_file_preview(row['sample_file'], key=f"pending_{idx}")
                 
                 with col_action:
                     key_prefix = f"pending_{row['chemical_raw']}"
@@ -441,6 +485,7 @@ with tab_unmatched:
                     st.write(f"**Sample value:** {row['sample_result']}")
                     st.write(f"**From:** {row['sample_file']} ({row['vendor']})")
                     st.write(f"**Occurrences:** {row['count']}")
+                    render_file_preview(row['sample_file'], key=f"unmatched_{idx}")
                 
                 with col_action:
                     key_prefix = f"unmatched_{row['chemical_raw']}"
@@ -504,7 +549,9 @@ with tab_submissions:
         sub_id = int(selected_sub)
         df_sub_results = load_results("r.submission_id = ?", (sub_id,))
         
+        sub_filename = df_subs.loc[df_subs['submission_id'] == sub_id, 'original_filename'].iloc[0]
         st.write(f"**{len(df_sub_results)} results** in this submission")
+        render_file_preview(sub_filename, key=f"submission_{sub_id}")
         
         # Show summary statistics
         col1, col2, col3 = st.columns(3)

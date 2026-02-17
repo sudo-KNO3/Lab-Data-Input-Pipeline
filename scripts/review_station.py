@@ -61,13 +61,16 @@ def load_analytes() -> pd.DataFrame:
 @st.cache_data(ttl=5)
 def load_results(where_clause: str = "1=1", params: tuple = ()) -> pd.DataFrame:
     conn = get_lab_conn()
+    # Also join the matcher DB to resolve analyte_id -> preferred_name
+    conn.execute("ATTACH DATABASE ? AS matcher", (MATCHER_DB,))
     df = pd.read_sql_query(
         f"""
         SELECT
             r.result_id, r.submission_id,
             s.original_filename, s.lab_vendor,
             r.chemical_raw, r.chemical_normalized,
-            r.analyte_id, r.correct_analyte_id,
+            r.analyte_id, a.preferred_name AS matched_analyte,
+            r.correct_analyte_id,
             r.match_method, r.match_confidence,
             r.sample_id, r.client_id, r.sample_date,
             r.result_value, r.units, r.qualifier,
@@ -75,12 +78,14 @@ def load_results(where_clause: str = "1=1", params: tuple = ()) -> pd.DataFrame:
             r.validation_status, r.validation_notes
         FROM lab_results r
         JOIN lab_submissions s ON r.submission_id = s.submission_id
+        LEFT JOIN matcher.analytes a ON r.analyte_id = a.analyte_id
         WHERE {where_clause}
         ORDER BY r.match_confidence ASC, r.chemical_raw
         """,
         conn,
         params=params,
     )
+    conn.execute("DETACH DATABASE matcher")
     conn.close()
     return df
 
@@ -334,6 +339,7 @@ with tab_pending:
                 count=("result_id", "size"),
                 confidence=("match_confidence", "first"),
                 matched_to=("analyte_id", "first"),
+                matched_name=("matched_analyte", "first"),
                 method=("match_method", "first"),
                 sample_file=("original_filename", "first"),
                 vendor=("lab_vendor", "first"),
@@ -345,19 +351,21 @@ with tab_pending:
         st.info(f"**{len(grouped)} unique chemicals** across {len(df_pending):,} results")
         
         for idx, row in grouped.iterrows():
+            matched_display = row['matched_name'] or row['matched_to'] or '(none)'
             with st.expander(
-                f"**{row['chemical_raw']}** — {row['confidence']:.0%} confidence, "
-                f"{row['count']} result(s) — matched to `{row['matched_to']}`",
+                f"**{row['chemical_raw']}**  →  {matched_display}  "
+                f"({row['confidence']:.0%}, {row['count']} results)",
                 expanded=(row["confidence"] < 0.80),
             ):
                 col_info, col_action = st.columns([3, 2])
                 
                 with col_info:
-                    st.write(f"**Raw name:** {row['chemical_raw']}")
-                    st.write(f"**Matched to:** `{row['matched_to']}` via {row['method']}")
+                    st.markdown(f"### Lab reported:  `{row['chemical_raw']}`")
+                    st.write(f"**System matched to:** {matched_display} (`{row['matched_to']}`)")
+                    st.write(f"**Match method:** {row['method']}")
                     st.write(f"**Confidence:** {row['confidence']:.1%}")
-                    st.write(f"**Occurrences:** {row['count']} results across files")
-                    st.write(f"**Sample file:** {row['sample_file']} ({row['vendor']})")
+                    st.write(f"**Occurrences:** {row['count']} results")
+                    st.write(f"**Source file:** {row['sample_file']} ({row['vendor']})")
                 
                 with col_action:
                     key_prefix = f"pending_{row['chemical_raw']}"
@@ -476,7 +484,7 @@ with tab_submissions:
             ] * len(row),
             axis=1,
         ),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
     )
     
@@ -504,11 +512,11 @@ with tab_submissions:
         col2.metric("Pending", len(df_sub_results[df_sub_results["validation_status"] == "pending"]))
         col3.metric("Avg Confidence", f"{df_sub_results['match_confidence'].mean():.1%}")
         
-        # Show the data
+        # Show the data — chemical_raw first and prominent
         display_cols = [
-            "result_id", "chemical_raw", "analyte_id", "match_confidence",
+            "chemical_raw", "matched_analyte", "match_confidence",
             "match_method", "sample_id", "result_value", "units",
-            "detection_limit", "validation_status",
+            "detection_limit", "validation_status", "result_id",
         ]
         
         # Color-code by status
@@ -521,7 +529,7 @@ with tab_submissions:
                 ] * len(row),
                 axis=1,
             ),
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             height=500,
         )
@@ -597,7 +605,7 @@ with tab_all:
     
     st.dataframe(
         df_all,
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         height=600,
     )

@@ -209,11 +209,32 @@ def process_file(
         logger.error(f"  Ingest failed (no submission created)")
         return False
 
+    # Check auto-accept stats
+    import sqlite3 as _sqlite3
+    _conn = _sqlite3.connect(LAB_DB_PATH)
+    auto_accepted = _conn.execute(
+        "SELECT COUNT(*) FROM lab_results WHERE submission_id = ? AND validation_status = 'accepted'",
+        (sub_id,),
+    ).fetchone()[0]
+    pending = _conn.execute(
+        "SELECT COUNT(*) FROM lab_results WHERE submission_id = ? AND validation_status = 'pending'",
+        (sub_id,),
+    ).fetchone()[0]
+    _conn.close()
+
     logger.info(
         f"  Ingested → submission #{sub_id}: "
         f"{total} chemicals, {high_conf} high-confidence, "
-        f"accuracy ≈ {accuracy:.1%}"
+        f"accuracy ≈ {accuracy:.1f}%"
     )
+    if auto_accepted > 0:
+        logger.info(
+            f"  Auto-accepted: {auto_accepted}/{total} (≥98% confidence)"
+        )
+    if pending > 0:
+        logger.info(
+            f"  Needs review: {pending} result(s) below threshold"
+        )
 
     # ── Export to Excel ────────────────────────────────────────────────────
     if export:

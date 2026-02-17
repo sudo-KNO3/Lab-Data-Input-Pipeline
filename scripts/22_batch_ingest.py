@@ -56,9 +56,14 @@ def ingest_file(
     normalizer: TextNormalizer,
     vendor_override: Optional[str] = None,
     dry_run: bool = False,
+    auto_accept_threshold: float = 0.98,
 ) -> Tuple[int, int, int, float]:
     """
     Ingest a single lab file.
+    
+    Args:
+        auto_accept_threshold: Matches at or above this confidence are
+            auto-accepted (set to 1.1 to disable). Default 0.98.
     
     Returns:
         (submission_id, total_chemicals, high_confidence_count, accuracy_estimate)
@@ -143,7 +148,7 @@ def ingest_file(
     submission_id = lab_conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     
     # Match chemicals
-    match_stats = {"high": 0, "medium": 0, "low": 0}
+    match_stats = {"high": 0, "medium": 0, "low": 0, "auto_accepted": 0}
     
     with db_manager.get_session() as session:
         resolver = build_engine(session, normalizer)
@@ -169,6 +174,15 @@ def ingest_file(
                 match_conf = 0.0
                 match_stats["low"] += 1
             
+            # Auto-accept matches at or above threshold
+            if match_conf >= auto_accept_threshold and analyte_id is not None:
+                validation_status = "accepted"
+                correct_analyte = analyte_id
+                match_stats["auto_accepted"] += 1
+            else:
+                validation_status = "pending"
+                correct_analyte = None
+            
             # Extract qualifier from result value
             qualifier = None
             if result_value:
@@ -179,17 +193,29 @@ def ingest_file(
             lab_conn.execute("""
                 INSERT INTO lab_results (
                     submission_id, row_number, chemical_raw, chemical_normalized,
-                    analyte_id, match_method, match_confidence,
+                    analyte_id, correct_analyte_id, match_method, match_confidence,
                     sample_id, result_value, units, qualifier,
-                    lab_method, validation_status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    lab_method, validation_status, human_override,
+                    validation_notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 submission_id, row_num, chem_raw, chem_norm,
-                analyte_id, match_method, match_conf,
+                analyte_id, correct_analyte,
+                match_method, match_conf,
                 sample_id, result_value, units, qualifier,
                 method_or_mac if fmt == 'eurofins' else None,
-                "pending"
+                validation_status,
+                0,  # human_override = False
+                f"Auto-accepted ({match_conf:.0%} confidence)"
+                    if validation_status == "accepted" else None,
             ))
+    
+    # If every result was auto-accepted, mark submission as validated
+    if match_stats["auto_accepted"] == len(raw_chemicals) and len(raw_chemicals) > 0:
+        lab_conn.execute(
+            "UPDATE lab_submissions SET validation_status = 'validated' WHERE submission_id = ?",
+            (submission_id,),
+        )
     
     lab_conn.commit()
     lab_conn.close()

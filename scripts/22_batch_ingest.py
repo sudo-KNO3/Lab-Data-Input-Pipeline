@@ -168,7 +168,7 @@ def ingest_file(
             
             # Use cache to avoid duplicate resolver calls for multi-sample rows
             if chem_norm not in resolve_cache:
-                result = resolver.resolve(chem_norm, confidence_threshold=0.70,
+                result = resolver.resolve(chem_raw, confidence_threshold=0.70,
                                           vendor=vendor)
                 
                 if result.best_match and result.best_match.confidence >= 0.70:

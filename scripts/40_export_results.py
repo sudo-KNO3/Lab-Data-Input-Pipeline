@@ -257,6 +257,49 @@ RESULTS_COLUMNS = [
 ]
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Convenience API (for watcher / programmatic use)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def export_submission(
+    submission_id: int,
+    output_path: str,
+    lab_db_path: Optional[str] = None,
+    matcher_db_path: Optional[str] = None,
+) -> Path:
+    """
+    Export a single submission to a formatted Excel file.
+
+    This is the public API for programmatic export (e.g. from the
+    file watcher).  It handles all the data loading internally.
+    """
+    # Temporarily override module-level DB paths if provided
+    global LAB_DB, MATCHER_DB
+    orig_lab, orig_matcher = LAB_DB, MATCHER_DB
+    try:
+        if lab_db_path:
+            LAB_DB = Path(lab_db_path)
+        if matcher_db_path:
+            MATCHER_DB = Path(matcher_db_path)
+
+        submissions = get_submissions(submission_id=submission_id)
+        if not submissions:
+            raise ValueError(f"Submission #{submission_id} not found")
+
+        sub_ids = [s["submission_id"] for s in submissions]
+        df = get_results(sub_ids)
+
+        if df.empty:
+            raise ValueError(f"No results for submission #{submission_id}")
+
+        analyte_lookup = load_analyte_lookup()
+        df = enrich_results(df, analyte_lookup)
+
+        return write_export(df, submissions, Path(output_path))
+    finally:
+        LAB_DB, MATCHER_DB = orig_lab, orig_matcher
+
+
 def write_export(
     df: pd.DataFrame,
     submissions: List[dict],

@@ -55,6 +55,9 @@ pytesseract>=0.3.10
 olefile>=0.47
 # Requires Tesseract OCR binary: winget install UB-Mannheim.TesseractOCR
 
+# Filesystem monitoring for drop-folder automation
+watchdog>=4.0.0
+
 # Logging
 loguru==0.7.2
 

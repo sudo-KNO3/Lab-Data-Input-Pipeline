@@ -193,6 +193,28 @@ def step_export(args, logger) -> bool:
     return _run_script("scripts/40_export_results.py", extra, logger)
 
 
+def step_watch(args, logger) -> bool:
+    """Launch the inbox file watcher (blocks until Ctrl-C)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "watch_inbox",
+        str(project_root / "scripts" / "50_watch_inbox.py"),
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    inbox = Path(getattr(args, "inbox", str(project_root / "data" / "inbox")))
+    inbox.mkdir(parents=True, exist_ok=True)
+
+    if getattr(args, "once", False):
+        stats = mod.scan_inbox(inbox, logger)
+        return stats["failed"] == 0
+    else:
+        mod.watch_inbox(inbox, logger)
+        return True
+
+
 def step_full(args, logger) -> bool:
     """Run all pipeline steps in sequence."""
     steps = [
@@ -260,6 +282,13 @@ def main():
     p_export = sub.add_parser("export", help="Export results to formatted Excel")
     p_export.add_argument("--submission-id", type=int, help="Export single submission")
 
+    # watch
+    p_watch = sub.add_parser("watch", help="Watch inbox folder for new lab files")
+    p_watch.add_argument("--inbox", default=str(project_root / "data" / "inbox"),
+                         help="Folder to watch (default: data/inbox/)")
+    p_watch.add_argument("--once", action="store_true",
+                         help="Process current files and exit (no continuous watch)")
+
     # status
     sub.add_parser("status", help="Print system health summary")
 
@@ -279,6 +308,7 @@ def main():
         "calibrate": step_calibrate,
         "embed": step_embed,
         "export": step_export,
+        "watch": step_watch,
         "status": step_status,
         "full": step_full,
     }

@@ -1,4 +1,4 @@
-Analyte_ID,Preferred_Name,Analyte_Type,CAS_Number,Group_Code,Table_Number,Chemical_Group
+Analyte_ID,Preferred_Name,Analyte_Type,CAS_Number,Group_Code,Table_Number,Chemical_Group,Parent_Analyte_ID
 REG153_METALS_001,Antimony,single_substance,,METAL,1,Metals
 REG153_METALS_002,Arsenic,single_substance,,METAL,1,Metals
 REG153_METALS_003,Barium,single_substance,,METAL,1,Metals
@@ -73,7 +73,8 @@ REG153_CPS_002,"Dichlorophenol 2,4-",single_substance,,CP,1,CPs
 REG153_CPS_003,Pentachlorophenol,single_substance,,CP,1,CPs
 REG153_CPS_004,"Trichlorophenol 2,4,5-",single_substance,,CP,1,CPs
 REG153_CPS_005,"Trichlorophenol 2,4,6-",single_substance,,CP,1,CPs
-REG153_PCBS_001,Polychlorinated biphenyls (total),suite,,PCB,1,PCBs
+REG153_PCBS_001,Polychlorinated biphenyls (total),suite,,PCB,1,PCBs,
+REG153_PCBS_002,Decachlorobiphenyl (PCB-209),single_substance,2051-24-3,PCB,1,PCBs,REG153_PCBS_001
 REG153_PHCS_001,Petroleum Hydrocarbons F1,fraction_or_group,,PHC_F1,1,PHCs
 REG153_PHCS_002,Petroleum Hydrocarbons F1 Less BTEX,fraction_or_group,,PHC_F1,1,PHCs
 REG153_PHCS_003,Petroleum Hydrocarbons F2,fraction_or_group,,PHC_F2,1,PHCs

@@ -47,6 +47,7 @@ def insert_analyte(
     smiles: Optional[str] = None,
     inchi_key: Optional[str] = None,
     molecular_formula: Optional[str] = None,
+    parent_analyte_id: Optional[str] = None,
 ) -> Analyte:
     """
     Insert a new analyte into the database.
@@ -63,6 +64,7 @@ def insert_analyte(
         smiles: SMILES notation (optional)
         inchi_key: InChI Key (optional)
         molecular_formula: Chemical formula (optional)
+        parent_analyte_id: Parent suite/group analyte_id (optional, for congeners)
     
     Returns:
         Created Analyte instance
@@ -81,6 +83,7 @@ def insert_analyte(
         smiles=smiles,
         inchi_key=inchi_key,
         molecular_formula=molecular_formula,
+        parent_analyte_id=parent_analyte_id,
     )
     
     session.add(analyte)

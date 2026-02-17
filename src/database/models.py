@@ -100,6 +100,15 @@ class Analyte(Base):
         comment="Metals, VOCs, PAHs, OCs, ABNs, CPs, PCBs, PHCs"
     )
     
+    # Parent-child hierarchy (e.g. individual PCB congeners under "PCBs total")
+    parent_analyte_id: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        ForeignKey("analytes.analyte_id"),
+        nullable=True,
+        index=True,
+        comment="Parent suite/group analyte_id for congeners or sub-compounds",
+    )
+    
     # Chemical structure (for single substances)
     smiles: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     inchi_key: Mapped[Optional[str]] = mapped_column(String(27), nullable=True, index=True)
@@ -115,6 +124,12 @@ class Analyte(Base):
     )
     
     # Relationships
+    parent: Mapped[Optional["Analyte"]] = relationship(
+        "Analyte", remote_side=[analyte_id], back_populates="children",
+    )
+    children: Mapped[list["Analyte"]] = relationship(
+        "Analyte", back_populates="parent", cascade="all, delete-orphan",
+    )
     synonyms: Mapped[list["Synonym"]] = relationship(back_populates="analyte", cascade="all, delete-orphan")
     lab_variants: Mapped[list["LabVariant"]] = relationship(back_populates="analyte", cascade="all, delete-orphan")
     match_decisions: Mapped[list["MatchDecision"]] = relationship(back_populates="analyte", cascade="all, delete-orphan")

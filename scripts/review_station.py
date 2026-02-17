@@ -94,7 +94,12 @@ def load_analytes() -> pd.DataFrame:
     """Load all canonical analytes for the correction dropdown."""
     conn = get_matcher_conn()
     df = pd.read_sql_query(
-        "SELECT analyte_id, preferred_name FROM analytes ORDER BY preferred_name",
+        """SELECT a.analyte_id, a.preferred_name, a.analyte_type,
+                  a.cas_number, a.group_code, a.chemical_group,
+                  a.parent_analyte_id, p.preferred_name AS parent_name
+           FROM analytes a
+           LEFT JOIN analytes p ON a.parent_analyte_id = p.analyte_id
+           ORDER BY a.preferred_name""",
         conn,
     )
     conn.close()
@@ -353,11 +358,12 @@ with st.sidebar:
 
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab_pending, tab_unmatched, tab_submissions, tab_all = st.tabs([
+tab_pending, tab_unmatched, tab_submissions, tab_all, tab_manage = st.tabs([
     f"⏳ Pending Review ({stats['pending']})",
     f"❌ Unmatched ({stats['unmatched']})",
     "📁 By Submission",
     "📊 All Results",
+    "🧪 Manage Analytes",
 ])
 
 
@@ -666,3 +672,170 @@ with tab_all:
             file_name="filtered_lab_results.csv",
             mime="text/csv",
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Tab 5: Manage Analytes
+# ═══════════════════════════════════════════════════════════════════════════════
+
+with tab_manage:
+    st.subheader("Manage Analytes")
+    st.caption(
+        "Browse existing analytes and add new child analytes "
+        "(e.g. individual PCB congeners under Polychlorinated biphenyls)."
+    )
+
+    analytes_df = load_analytes()
+
+    # ── Browse existing analytes ──────────────────────────────────────────────
+    st.markdown("### Current Analytes")
+    group_filter = st.selectbox(
+        "Filter by group",
+        ["All"] + sorted(analytes_df["chemical_group"].dropna().unique().tolist()),
+        key="manage_group_filter",
+    )
+    browse_df = analytes_df if group_filter == "All" else analytes_df[
+        analytes_df["chemical_group"] == group_filter
+    ]
+    display_cols_manage = [
+        "analyte_id", "preferred_name", "analyte_type",
+        "cas_number", "group_code", "chemical_group", "parent_name",
+    ]
+    st.dataframe(
+        browse_df[display_cols_manage].rename(columns={"parent_name": "Parent Analyte"}),
+        width='stretch',
+        hide_index=True,
+        height=350,
+    )
+    st.write(f"**{len(browse_df)} analytes** shown")
+
+    st.divider()
+
+    # ── Add new child analyte ─────────────────────────────────────────────────
+    st.markdown("### ➕ Add New Child Analyte")
+    st.caption(
+        "Create a new sub-compound under an existing parent analyte. "
+        "For example, adding individual PCB congeners under the PCBs total suite."
+    )
+
+    # Parent analyte selector — only show suite/fraction/group types, or all
+    parent_options = analytes_df["preferred_name"].tolist()
+    selected_parent = st.selectbox(
+        "Parent analyte:",
+        options=[""] + parent_options,
+        key="new_child_parent",
+        format_func=lambda x: x if x else "— select parent analyte —",
+    )
+
+    col_name, col_cas = st.columns(2)
+    with col_name:
+        new_name = st.text_input("New analyte name", key="new_child_name",
+                                 placeholder="e.g. Decachlorobiphenyl (PCB-209)")
+    with col_cas:
+        new_cas = st.text_input("CAS number (optional)", key="new_child_cas",
+                                placeholder="e.g. 2051-24-3")
+
+    new_synonyms_raw = st.text_area(
+        "Additional synonyms (one per line)",
+        key="new_child_synonyms",
+        placeholder="PCB-209\nPCB 209\nDecachlorobiphenyl",
+        height=100,
+    )
+
+    if selected_parent and new_name:
+        parent_row = analytes_df[analytes_df["preferred_name"] == selected_parent].iloc[0]
+        parent_id = parent_row["analyte_id"]
+        parent_group = parent_row["group_code"] or ""
+        parent_chem_group = parent_row["chemical_group"] or ""
+        parent_table = int(parent_row.get("table_number", 0) or 0) or None
+
+        # Auto-generate the next ID for this group
+        group_prefix = parent_id.rsplit("_", 1)[0]  # e.g. REG153_PCBS
+        existing_ids = analytes_df[
+            analytes_df["analyte_id"].str.startswith(group_prefix + "_")
+        ]["analyte_id"].tolist()
+        max_num = max(
+            (int(aid.rsplit("_", 1)[1]) for aid in existing_ids), default=0
+        )
+        next_id = f"{group_prefix}_{max_num + 1:03d}"
+
+        st.info(
+            f"**Preview:** `{next_id}` — {new_name}  \n"
+            f"**Parent:** {selected_parent} (`{parent_id}`)  \n"
+            f"**Group:** {parent_chem_group} / {parent_group}  \n"
+            f"**CAS:** {new_cas or '(none)'}  \n"
+            f"**Type:** single_substance"
+        )
+
+        if st.button("🧪 Create Child Analyte", type="primary", key="create_child_btn"):
+            try:
+                matcher_conn = get_matcher_conn()
+
+                # Check if ID already exists
+                existing = matcher_conn.execute(
+                    "SELECT analyte_id FROM analytes WHERE analyte_id = ?", (next_id,)
+                ).fetchone()
+                if existing:
+                    st.error(f"Analyte ID {next_id} already exists!")
+                else:
+                    from datetime import datetime as dt
+                    now = dt.utcnow().isoformat()
+
+                    # Insert analyte
+                    matcher_conn.execute(
+                        """INSERT INTO analytes
+                           (analyte_id, preferred_name, analyte_type, cas_number,
+                            group_code, table_number, chemical_group,
+                            parent_analyte_id, created_at, updated_at)
+                           VALUES (?, ?, 'SINGLE_SUBSTANCE', ?, ?, ?, ?, ?, ?, ?)""",
+                        (next_id, new_name, new_cas or None,
+                         parent_group, parent_table, parent_chem_group,
+                         parent_id, now, now),
+                    )
+
+                    # Add the name itself as a synonym
+                    from src.normalization.text_normalizer import TextNormalizer
+                    normalizer = TextNormalizer()
+
+                    all_synonyms = [new_name]
+                    if new_cas:
+                        all_synonyms.append(new_cas)
+                    if new_synonyms_raw:
+                        all_synonyms.extend(
+                            line.strip()
+                            for line in new_synonyms_raw.strip().split("\n")
+                            if line.strip()
+                        )
+
+                    added_norms = set()
+                    for syn_raw in all_synonyms:
+                        norm = normalizer.normalize(syn_raw)
+                        if norm in added_norms:
+                            continue
+                        added_norms.add(norm)
+                        matcher_conn.execute(
+                            """INSERT INTO synonyms
+                               (analyte_id, synonym_raw, synonym_norm, synonym_type,
+                                harvest_source, confidence, lab_vendor,
+                                normalization_version, created_at)
+                               VALUES (?, ?, ?, 'COMMON', 'review_station', 1.0, '', 1, ?)""",
+                            (next_id, syn_raw, norm, now),
+                        )
+
+                    matcher_conn.commit()
+                    matcher_conn.close()
+
+                    load_analytes.clear()
+                    st.success(
+                        f"Created **{next_id}** — {new_name} "
+                        f"with {len(added_norms)} synonym(s), "
+                        f"linked to parent {selected_parent}"
+                    )
+                    st.rerun()
+
+            except Exception as e:
+                st.error(f"Error creating analyte: {e}")
+    elif not selected_parent:
+        st.warning("Select a parent analyte to continue.")
+    elif not new_name:
+        st.warning("Enter a name for the new analyte.")

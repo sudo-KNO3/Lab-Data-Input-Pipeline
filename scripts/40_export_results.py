@@ -79,9 +79,11 @@ def load_analyte_lookup() -> Dict[str, dict]:
     """Load analyte metadata from reg153_matcher.db into a lookup dict."""
     conn = sqlite3.connect(str(MATCHER_DB))
     rows = conn.execute("""
-        SELECT analyte_id, preferred_name, cas_number, group_code,
-               chemical_group, table_number
-        FROM analytes
+        SELECT a.analyte_id, a.preferred_name, a.cas_number, a.group_code,
+               a.chemical_group, a.table_number, a.parent_analyte_id,
+               p.preferred_name AS parent_name
+        FROM analytes a
+        LEFT JOIN analytes p ON a.parent_analyte_id = p.analyte_id
     """).fetchall()
     conn.close()
 
@@ -93,6 +95,8 @@ def load_analyte_lookup() -> Dict[str, dict]:
             "group_code": row[3],
             "chemical_group": row[4],
             "table_number": row[5],
+            "parent_analyte_id": row[6],
+            "parent_name": row[7],
         }
     return lookup
 

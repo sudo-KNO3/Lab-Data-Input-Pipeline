@@ -122,6 +122,7 @@ def load_reg153_master(db_manager: DatabaseManager, csv_path: str) -> int:
                     smiles = row.get('SMILES', '').strip() or None
                     inchi_key = row.get('InChI_Key', '').strip() or None
                     molecular_formula = row.get('Molecular_Formula', '').strip() or None
+                    parent_analyte_id = row.get('Parent_Analyte_ID', '').strip() or None
                     
                     # Parse table number
                     table_number = None
@@ -148,6 +149,7 @@ def load_reg153_master(db_manager: DatabaseManager, csv_path: str) -> int:
                         smiles=smiles,
                         inchi_key=inchi_key,
                         molecular_formula=molecular_formula,
+                        parent_analyte_id=parent_analyte_id,
                     )
                     
                     analytes_loaded += 1

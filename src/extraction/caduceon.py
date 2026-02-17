@@ -21,6 +21,26 @@ import pandas as pd
 from .filters import is_chemical_row
 
 
+def _infer_medium_from_units(units: str) -> str:
+    """Infer sample medium from units string.
+
+    Returns 'Soil' for mass-per-mass units (ug/g, mg/kg, etc.),
+    'Water' for mass-per-volume units (mg/L, ug/L, etc.),
+    or '' if undetermined.
+    """
+    u = units.lower().strip()
+    if not u:
+        return ''
+    # Soil indicators (mass/mass)
+    if any(kw in u for kw in ['ug/g', 'mg/kg', 'ug/kg', 'ng/g', 'ppm']):
+        return 'Soil'
+    # Water indicators (mass/volume or volume-based)
+    if any(kw in u for kw in ['mg/l', 'ug/l', 'ng/l', 'cfu/100ml',
+                               'mpn/100ml', 'us/cm', 'ntu']):
+        return 'Water'
+    return ''
+
+
 def extract_metadata(df: pd.DataFrame) -> Dict[str, str]:
     """
     Extract header metadata from a Caduceon CA file.
@@ -58,7 +78,8 @@ def extract_chemicals(
     Returns:
         List of dicts with keys:
             row_num, chemical, units, detection_limit, result_value,
-            sample_id, client_id, sample_date, lab_method, chemical_group
+            sample_id, client_id, sample_date, lab_method, chemical_group,
+            medium
     """
     chemicals: List[Dict] = []
 
@@ -128,6 +149,7 @@ def extract_chemicals(
                 'sample_date': si['sample_date'],
                 'lab_method': '',
                 'chemical_group': '',
+                'medium': _infer_medium_from_units(units),
             })
 
         # Fallback: no sample columns found
@@ -143,6 +165,7 @@ def extract_chemicals(
                 'sample_date': '',
                 'lab_method': '',
                 'chemical_group': '',
+                'medium': _infer_medium_from_units(units),
             })
 
     return chemicals

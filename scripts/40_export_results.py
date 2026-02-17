@@ -167,7 +167,8 @@ def get_results(
             r.detection_limit,
             r.lab_method,
             r.validation_status,
-            r.human_override
+            r.human_override,
+            r.medium
         FROM lab_results r
         JOIN lab_submissions s ON r.submission_id = s.submission_id
         WHERE r.submission_id IN ({placeholders})
@@ -243,6 +244,7 @@ RESULTS_COLUMNS = [
     ("Lab File", "original_filename"),
     ("Lab Vendor", "lab_vendor"),
     ("Sample ID", "sample_id"),
+    ("Medium", "medium"),
     ("Lab Chemical Name", "chemical_raw"),
     ("Reg 153 Analyte", "reg153_name"),
     ("Analyte ID", "effective_analyte_id"),

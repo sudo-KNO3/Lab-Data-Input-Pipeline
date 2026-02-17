@@ -123,7 +123,7 @@ def load_results(where_clause: str = "1=1", params: tuple = ()) -> pd.DataFrame:
             r.sample_id, r.client_id, r.sample_date,
             r.result_value, r.units, r.qualifier,
             r.detection_limit, r.lab_method, r.chemical_group,
-            r.validation_status, r.validation_notes
+            r.validation_status, r.validation_notes, r.medium
         FROM lab_results r
         JOIN lab_submissions s ON r.submission_id = s.submission_id
         LEFT JOIN matcher.analytes a ON r.analyte_id = a.analyte_id

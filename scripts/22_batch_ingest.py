@@ -219,8 +219,8 @@ def ingest_file(
                     analyte_id, correct_analyte_id, match_method, match_confidence,
                     sample_id, client_id, sample_date, result_value, units,
                     qualifier, detection_limit, lab_method, chemical_group,
-                    validation_status, human_override, validation_notes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    validation_status, human_override, validation_notes, medium
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 submission_id, rec['row_num'], chem_raw, chem_norm,
                 analyte_id, correct_analyte,
@@ -238,6 +238,7 @@ def ingest_file(
                 0,  # human_override = False
                 f"Auto-accepted ({match_conf:.0%} confidence)"
                     if validation_status == "accepted" else None,
+                rec.get('medium', ''),
             ))
     
     # If every result was auto-accepted, mark submission as validated

@@ -79,9 +79,17 @@ def extract_chemicals(
     Returns:
         List of dicts with keys:
             row_num, chemical, units, detection_limit, result_value,
-            sample_id, client_id, sample_date, lab_method, chemical_group
+            sample_id, client_id, sample_date, lab_method, chemical_group,
+            medium
     """
     chemicals: List[Dict] = []
+
+    # Extract sample matrix from metadata (Row 15, Col 1)
+    medium = ''
+    if df.shape[0] > 15 and df.shape[1] > 1:
+        v = df.iloc[15, 1]
+        if pd.notna(v):
+            medium = str(v).strip()
 
     # Find header row containing "Parameter" in col 0
     header_row = 20  # default
@@ -176,6 +184,7 @@ def extract_chemicals(
                 'sample_date': si['sample_date'],
                 'lab_method': '',
                 'chemical_group': '',
+                'medium': medium,
             })
 
         # Fallback: no sample columns found
@@ -191,6 +200,7 @@ def extract_chemicals(
                 'sample_date': '',
                 'lab_method': '',
                 'chemical_group': '',
+                'medium': medium,
             })
 
     return chemicals

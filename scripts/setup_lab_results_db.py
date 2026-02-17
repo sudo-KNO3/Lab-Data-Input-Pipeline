@@ -35,6 +35,11 @@ def create_schema(conn: sqlite3.Connection):
             layout_confidence FLOAT,
             template_id TEXT,
             
+            -- OCR cross-validation
+            ocr_confidence FLOAT,
+            ocr_checks_passed INTEGER,
+            ocr_checks_total INTEGER,
+            
             -- Validation status
             validation_status TEXT DEFAULT 'pending',
             validated_by TEXT,

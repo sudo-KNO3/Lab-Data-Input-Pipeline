@@ -35,7 +35,7 @@ class MatchResult:
             raise ValueError(f"Confidence must be between 0 and 1, got {self.confidence}")
         
         valid_methods = {'exact', 'fuzzy', 'semantic', 'cas_extracted', 'hybrid', 'unknown',
-                         'vendor_cache', 'vendor_cache_stale'}
+                         'vendor_cache', 'vendor_cache_stale', 'pubchem'}
         if self.method not in valid_methods:
             raise ValueError(f"Invalid method '{self.method}', must be one of {valid_methods}")
 

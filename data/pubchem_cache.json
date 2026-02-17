@@ -1,0 +1,142 @@
+{
+  "toluene": {
+    "cid": 1140,
+    "iupac_name": "toluene",
+    "formula": "C7H8",
+    "molecular_weight": "92.14",
+    "cas_numbers": [
+      "108-88-3",
+      "25013-04-1"
+    ],
+    "synonyms": [
+      "toluene",
+      "methylbenzene",
+      "toluol",
+      "108-88-3",
+      "Phenylmethane",
+      "methacide",
+      "methylbenzol",
+      "antisal 1a",
+      "Benzene, methyl-",
+      "Toluen",
+      "tolu-sol",
+      "monomethyl benzene",
+      "Methane, phenyl-",
+      "Tolueen",
+      "Toluolo",
+      "phenyl methane",
+      "1-Methylbenzene",
+      "RCRA waste number U220",
+      "Tolueno",
+      "methyl benzene",
+      "Caswell No. 859",
+      "NCI-C07272",
+      "CP 25",
+      "NSC 406333",
+      "EPA Pesticide Chemical Code 080601"
+    ],
+    "queried_at": "2026-02-16T22:43:45.437852",
+    "matched_analyte_id": "REG153_VOCS_034",
+    "found": true
+  },
+  "xylol": {
+    "query": "Xylol",
+    "found": false,
+    "queried_at": "2026-02-16T22:43:45.808645"
+  },
+  "vinyl chloride": {
+    "cid": 6338,
+    "iupac_name": "chloroethene",
+    "formula": "C2H3Cl",
+    "molecular_weight": "62.50",
+    "cas_numbers": [
+      "75-01-4",
+      "1187028-37-0",
+      "26793-37-3"
+    ],
+    "synonyms": [
+      "VINYL CHLORIDE",
+      "Chloroethene",
+      "Chloroethylene",
+      "75-01-4",
+      "Ethene, chloro-",
+      "Monochloroethylene",
+      "Monochloroethene",
+      "Vinylchloride",
+      "Ethylene monochloride",
+      "Chlorethylene",
+      "Vinylchlorid",
+      "Monovinyl chloride",
+      "Vinyl chloride monomer",
+      "Chlorethene",
+      "Chlorure de vinyle",
+      "Ethylene, chloro-",
+      "Trovidur",
+      "Vinyl C monomer",
+      "Vinyl chlorine",
+      "Winylu chlorek",
+      "Cloruro di vinile",
+      "Vinyle(chlorure de)",
+      "RCRA waste number U043",
+      "Vinile (cloruro di)",
+      "1-Chloroethylene"
+    ],
+    "queried_at": "2026-02-16T22:43:46.430079",
+    "matched_analyte_id": "REG153_VOCS_039",
+    "found": true
+  },
+  "bfb recovery": {
+    "query": "BFB recovery",
+    "found": false,
+    "queried_at": "2026-02-16T22:43:46.725048"
+  },
+  "moisture-humidite": {
+    "query": "Moisture-Humidite",
+    "found": false,
+    "queried_at": "2026-02-16T22:43:46.983898"
+  },
+  "ph cacl2": {
+    "query": "pH CaCl2",
+    "found": false,
+    "queried_at": "2026-02-16T22:43:47.216061"
+  },
+  "toluene-d8": {
+    "cid": 74861,
+    "iupac_name": "1,2,3,4,5-pentadeuterio-6-(trideuteriomethyl)benzene",
+    "formula": "C7H8",
+    "molecular_weight": "100.19",
+    "cas_numbers": [
+      "2037-26-5"
+    ],
+    "synonyms": [
+      "TOLUENE-D8",
+      "2037-26-5",
+      "Benzene-d5, methyl-d3-",
+      "(2H8)Toluene",
+      "Perdeuteriotoluene",
+      "Perdeuterated toluene",
+      "Deuterated toluene",
+      "Benzened5, methyld3",
+      "218-009-5",
+      "Toluene D8",
+      "1,2,3,4,5-pentadeuterio-6-(trideuteriomethyl)benzene",
+      "Toluene D8 >99.5%",
+      "Benzene-D5-, methyl-D3-",
+      "toluene-d",
+      "Toluene D8 2000 microg/mL in Methanol",
+      "Toluene-d8 (reagent grade)",
+      "Toluene-d8, 99 atom % D",
+      "Toluene-d8, 99.6 atom % D",
+      "Perdeuterotoluene",
+      "1-(methyl-d3)benzene-2,3,4,5,6-d5",
+      "C7D8",
+      "Toluene-d8, \"100%\", 99.96 atom % D",
+      "OCTADEUTEROTOLUENE",
+      "C6D5CD3",
+      "orb2299633"
+    ],
+    "queried_at": "2026-02-16T22:43:47.824072",
+    "matched_analyte_id": "REG153_QC_001",
+    "found": true
+  }
+}

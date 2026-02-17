@@ -20,6 +20,7 @@ from src.matching.exact_matcher import ExactMatcher
 from src.matching.fuzzy_matcher import FuzzyMatcher
 from src.matching.resolution_engine import ResolutionEngine
 from src.matching.semantic_matcher import SemanticMatcher
+from src.matching.pubchem_fallback import PubChemFallback
 from src.matching.types import EmbeddingConfig
 
 _logger = logging.getLogger(__name__)
@@ -87,6 +88,7 @@ __all__ = [
     "FuzzyMatcher",
     "ResolutionEngine",
     "SemanticMatcher",
+    "PubChemFallback",
     "EmbeddingConfig",
     "build_engine",
 ]

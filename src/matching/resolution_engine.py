@@ -12,6 +12,7 @@ Cascade order:
   Step 2:  Exact normalized matching
   Step 3:  Fuzzy matching (Levenshtein) with optional vendor tiebreak
   Step 4:  Semantic matching (FAISS + sentence-transformers)
+  Step 4b: PubChem fallback (API lookup when local DB has no confident match)
   Step 5:  Decision gate (two-axis: score + margin, OOD, cross-method)
 """
 
@@ -29,6 +30,7 @@ from src.normalization.cas_extractor import CASExtractor
 from src.matching.exact_matcher import ExactMatcher
 from src.matching.fuzzy_matcher import FuzzyMatcher
 from src.matching.match_result import MatchResult, ResolutionResult
+from src.matching.pubchem_fallback import PubChemFallback
 from src.database.models import Synonym, Analyte, LabVariant, LabVariantConfirmation, ValidationConfidence
 
 logger = logging.getLogger(__name__)
@@ -95,6 +97,7 @@ class ResolutionEngine:
     2. Exact normalized matching
     3. Fuzzy matching (Levenshtein) with vendor tiebreak
     4. Semantic matching (FAISS + sentence-transformers)
+    4b. PubChem API fallback (auto CAS cross-reference + synonym harvest)
     
     Implements confidence thresholds, disagreement detection,
     margin computation, and a bounded vendor-conditioned prior layer.
@@ -117,6 +120,8 @@ class ResolutionEngine:
                  exact_matcher: Optional[ExactMatcher] = None,
                  fuzzy_matcher: Optional[FuzzyMatcher] = None,
                  semantic_matcher=None,
+                 pubchem_fallback: Optional[PubChemFallback] = None,
+                 enable_pubchem: bool = True,
                  config_path: Optional[Path] = None,
                  auto_accept: Optional[float] = None,
                  review: Optional[float] = None):
@@ -140,6 +145,20 @@ class ResolutionEngine:
         self.exact_matcher = exact_matcher or ExactMatcher(self.normalizer, self.cas_extractor)
         self.fuzzy_matcher = fuzzy_matcher or FuzzyMatcher(self.normalizer)
         self.semantic_matcher = semantic_matcher
+        
+        # PubChem fallback (created lazily if enable_pubchem=True)
+        self.enable_pubchem = enable_pubchem
+        self.pubchem_fallback = pubchem_fallback
+        if self.enable_pubchem and self.pubchem_fallback is None:
+            try:
+                self.pubchem_fallback = PubChemFallback(
+                    db_session=db_session,
+                    normalizer=self.normalizer,
+                )
+                logger.info("PubChem fallback enabled")
+            except Exception as e:
+                logger.warning(f"PubChem fallback init failed: {e}")
+                self.pubchem_fallback = None
         
         # Load thresholds: constructor override > YAML config > hardcoded default
         cfg = _load_thresholds(config_path)
@@ -284,6 +303,33 @@ class ResolutionEngine:
                         best_match = converted[0]
             except Exception as e:
                 logger.warning(f"Semantic matching failed for '{input_text}': {e}")
+        
+        # ── Step 3b: PubChem API fallback ────────────────────────────
+        # Triggered when no match found OR best match is below auto-accept
+        # and no exact/CAS match exists. Queries PubChem, cross-refs CAS,
+        # auto-adds synonyms if a local analyte shares the same CAS.
+        if self.pubchem_fallback and (not best_match or best_match.confidence < self.AUTO_ACCEPT):
+            try:
+                pubchem_result, pubchem_meta = self.pubchem_fallback.resolve(input_text)
+                signals_used['pubchem_lookup'] = True
+                signals_used['pubchem_status'] = pubchem_meta.get('pubchem_status', 'unknown')
+                
+                if pubchem_result:
+                    all_candidates.append(pubchem_result)
+                    # PubChem CAS cross-ref produces exact match (conf 1.0)
+                    # so it should always beat fuzzy/semantic
+                    if not best_match or pubchem_result.confidence > best_match.confidence:
+                        best_match = pubchem_result
+                    logger.info(
+                        f"PubChem fallback matched '{input_text}' → "
+                        f"{pubchem_result.preferred_name} ({pubchem_result.confidence:.3f})"
+                    )
+                else:
+                    # PubChem data available but no CAS match — attach for review
+                    signals_used['pubchem_data'] = pubchem_meta.get('pubchem_data')
+            except Exception as e:
+                logger.warning(f"PubChem fallback failed for '{input_text}': {e}")
+                signals_used['pubchem_lookup'] = False
         
         # ── Step 4: Apply disagreement penalty ──────────────────────
         if disagreement_flag and best_match:

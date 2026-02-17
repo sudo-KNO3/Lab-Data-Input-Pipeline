@@ -14,7 +14,7 @@ Handles the standard Eurofins XLS/XLSX layout:
              cols 5+ = sample results
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import pandas as pd
 
@@ -46,14 +46,16 @@ def extract_metadata(df: pd.DataFrame) -> Dict[str, str]:
 
 def extract_chemicals(
     df: pd.DataFrame,
-) -> List[Tuple[int, str, str, str, str, str]]:
+) -> List[Dict]:
     """
-    Extract chemical rows from a Eurofins file.
+    Extract chemical rows from a Eurofins file (all samples).
 
     Returns:
-        List of (row_num, chem_name, units, method, result_value, sample_id).
+        List of dicts with keys:
+            row_num, chemical, units, detection_limit, result_value,
+            sample_id, client_id, sample_date, lab_method, chemical_group
     """
-    chemicals: List[Tuple[int, str, str, str, str, str]] = []
+    chemicals: List[Dict] = []
 
     # Locate header row (should contain "Analyte" in col 1)
     header_row = 12
@@ -67,24 +69,46 @@ def extract_chemicals(
             header_row = r
             break
 
-    # Sample IDs (typically a few rows above the header)
-    sample_ids: List[Tuple[int, str]] = []
-    for r in range(max(0, header_row - 4), header_row):
-        cell = (
-            str(df.iloc[r, 4])
+    # Build sample info from rows above the header
+    sample_info: List[Dict] = []
+    sample_id_row = None
+    sample_date_row = None
+
+    for r in range(max(0, header_row - 5), header_row):
+        cell4 = (
+            str(df.iloc[r, 4]).strip().lower()
             if df.shape[1] > 4 and pd.notna(df.iloc[r, 4])
             else ''
         )
-        if 'sample id' in cell.lower():
-            for c in range(5, df.shape[1]):
-                val = str(df.iloc[r, c]).strip() if pd.notna(df.iloc[r, c]) else ''
-                if val and val != 'nan':
-                    sample_ids.append((c, val))
-            break
+        if 'sample id' in cell4:
+            sample_id_row = r
+        elif 'sample date' in cell4:
+            sample_date_row = r
+
+    if sample_id_row is not None:
+        for c in range(5, df.shape[1]):
+            val = str(df.iloc[sample_id_row, c]).strip() if pd.notna(df.iloc[sample_id_row, c]) else ''
+            if val and val != 'nan':
+                sdate = ''
+                if sample_date_row is not None and pd.notna(df.iloc[sample_date_row, c]):
+                    sdate = str(df.iloc[sample_date_row, c]).strip()
+
+                sample_info.append({
+                    'col': c,
+                    'sample_id': val,
+                    'client_id': val,
+                    'sample_date': sdate,
+                })
 
     data_start = header_row + 1
+    current_group = ''
 
     for row_idx in range(data_start, len(df)):
+        # Track chemical group (col 0)
+        group_cell = df.iloc[row_idx, 0]
+        if pd.notna(group_cell) and str(group_cell).strip():
+            current_group = str(group_cell).strip()
+
         cell = df.iloc[row_idx, 1]  # Analyte in col 1
         if pd.isna(cell):
             continue
@@ -102,15 +126,45 @@ def extract_chemicals(
             if df.shape[1] > 3 and pd.notna(df.iloc[row_idx, 3])
             else ''
         )
+        mrl = (
+            str(df.iloc[row_idx, 4]).strip()
+            if df.shape[1] > 4 and pd.notna(df.iloc[row_idx, 4])
+            else ''
+        )
 
-        result_value = ''
-        sample_id = ''
-        if sample_ids:
-            col_idx = sample_ids[0][0]
-            sample_id = sample_ids[0][1]
+        # Emit one row per sample
+        for si in sample_info:
+            result_value = ''
+            col_idx = si['col']
             if col_idx < df.shape[1] and pd.notna(df.iloc[row_idx, col_idx]):
                 result_value = str(df.iloc[row_idx, col_idx]).strip()
 
-        chemicals.append((row_idx, chem_name, units, method, result_value, sample_id))
+            chemicals.append({
+                'row_num': row_idx,
+                'chemical': chem_name,
+                'units': units,
+                'detection_limit': mrl,
+                'result_value': result_value,
+                'sample_id': si['sample_id'],
+                'client_id': si['client_id'],
+                'sample_date': si['sample_date'],
+                'lab_method': method,
+                'chemical_group': current_group,
+            })
+
+        # Fallback: no sample columns found
+        if not sample_info:
+            chemicals.append({
+                'row_num': row_idx,
+                'chemical': chem_name,
+                'units': units,
+                'detection_limit': mrl,
+                'result_value': '',
+                'sample_id': '',
+                'client_id': '',
+                'sample_date': '',
+                'lab_method': method,
+                'chemical_group': current_group,
+            })
 
     return chemicals

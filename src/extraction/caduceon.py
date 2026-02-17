@@ -1,9 +1,11 @@
 """
 Caduceon CA format extraction.
 
-Handles the standard Caduceon certificate-of-analysis XLS layout:
+Handles the standard Caduceon certificate-of-analysis XLS layout
+(used by both SGS and older Caduceon labs):
     Row  6: Report No.
     Row 13: Sample-ID headers (cols 8+)
+    Row 14: Sample Date/Time  (cols 8+)
     Row 15: Analysis / Units sub-headers
     Row 18+: Chemical data
              col 0 = chemical name
@@ -49,22 +51,34 @@ def extract_metadata(df: pd.DataFrame) -> Dict[str, str]:
 
 def extract_chemicals(
     df: pd.DataFrame,
-) -> List[Tuple[int, str, str, str, str, str]]:
+) -> List[Dict]:
     """
-    Extract chemical rows from a Caduceon CA file.
+    Extract chemical rows from a Caduceon CA file (all samples).
 
     Returns:
-        List of (row_num, chem_name, units, mac_limit, result_value, sample_id).
+        List of dicts with keys:
+            row_num, chemical, units, detection_limit, result_value,
+            sample_id, client_id, sample_date, lab_method, chemical_group
     """
-    chemicals: List[Tuple[int, str, str, str, str, str]] = []
+    chemicals: List[Dict] = []
 
     # Sample IDs from header row (row 13, cols 8+)
-    sample_ids: List[Tuple[int, str]] = []
+    sample_info: List[Dict] = []
     if df.shape[0] > 13:
         for c in range(8, df.shape[1]):
             val = str(df.iloc[13, c]).strip() if pd.notna(df.iloc[13, c]) else ''
             if val and val != 'nan':
-                sample_ids.append((c, val))
+                # Sample date from row 14
+                sample_date = ''
+                if df.shape[0] > 14 and pd.notna(df.iloc[14, c]):
+                    sample_date = str(df.iloc[14, c]).strip()
+
+                sample_info.append({
+                    'col': c,
+                    'sample_id': val,
+                    'client_id': val,
+                    'sample_date': sample_date,
+                })
 
     # Find where chemical data starts (normally row 18)
     data_start = 18
@@ -96,14 +110,39 @@ def extract_chemicals(
             else ''
         )
 
-        result_value = ''
-        sample_id = ''
-        if sample_ids:
-            col_idx = sample_ids[0][0]
-            sample_id = sample_ids[0][1]
+        # Emit one row per sample
+        for si in sample_info:
+            result_value = ''
+            col_idx = si['col']
             if col_idx < df.shape[1] and pd.notna(df.iloc[row_idx, col_idx]):
                 result_value = str(df.iloc[row_idx, col_idx]).strip()
 
-        chemicals.append((row_idx, chem_name, units, mac, result_value, sample_id))
+            chemicals.append({
+                'row_num': row_idx,
+                'chemical': chem_name,
+                'units': units,
+                'detection_limit': mac,
+                'result_value': result_value,
+                'sample_id': si['sample_id'],
+                'client_id': si['client_id'],
+                'sample_date': si['sample_date'],
+                'lab_method': '',
+                'chemical_group': '',
+            })
+
+        # Fallback: no sample columns found
+        if not sample_info:
+            chemicals.append({
+                'row_num': row_idx,
+                'chemical': chem_name,
+                'units': units,
+                'detection_limit': mac,
+                'result_value': '',
+                'sample_id': '',
+                'client_id': '',
+                'sample_date': '',
+                'lab_method': '',
+                'chemical_group': '',
+            })
 
     return chemicals

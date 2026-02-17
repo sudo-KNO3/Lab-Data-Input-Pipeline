@@ -46,9 +46,25 @@ def detect_format(df: pd.DataFrame, filename: str) -> str:
         if 'report no' in cell60.lower():
             return 'caduceon_ca'
 
-    # Caduceon xlsx (original format)
-    if filename.lower().endswith('.xlsx') and 'caduceon' in filename.lower():
-        return 'caduceon_xlsx'
+    # Caduceon xlsx: identified by content (row 7 col 5 contains lab name,
+    # or row 20 col 0 = "Parameter" with col 1 = "Units")
+    # Works even when filename is misspelled (e.g. "Caducoen")
+    if filename.lower().endswith('.xlsx'):
+        # Content-based: check for Caduceon lab header
+        if df.shape[0] > 7 and df.shape[1] > 5:
+            cell75 = str(df.iloc[7, 5]) if pd.notna(df.iloc[7, 5]) else ''
+            if 'caduceon' in cell75.lower():
+                return 'caduceon_xlsx'
+        # Content-based: check for "Parameter" / "Units" header row
+        if df.shape[0] > 20 and df.shape[1] > 1:
+            cell200 = str(df.iloc[20, 0]).strip().lower() if pd.notna(df.iloc[20, 0]) else ''
+            cell201 = str(df.iloc[20, 1]).strip().lower() if pd.notna(df.iloc[20, 1]) else ''
+            if cell200 == 'parameter' and cell201 == 'units':
+                return 'caduceon_xlsx'
+        # Filename fallback (handles common misspellings)
+        fname_lower = filename.lower()
+        if 'caduceon' in fname_lower or 'caducoen' in fname_lower:
+            return 'caduceon_xlsx'
 
     return 'unknown'
 

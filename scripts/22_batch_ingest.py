@@ -30,6 +30,7 @@ from src.matching import build_engine
 from src.normalization.text_normalizer import TextNormalizer
 from src.extraction import detect_format, detect_vendor, extract_chemicals as extract_chemicals_dispatch
 from src.extraction.caduceon import extract_chemicals as extract_ca_chemicals, extract_metadata as extract_ca_metadata
+from src.extraction.caduceon_xlsx import extract_chemicals as extract_cad_xlsx_chemicals, extract_metadata as extract_cad_xlsx_metadata
 from src.extraction.eurofins import extract_chemicals as extract_eurofins_chemicals, extract_metadata as extract_eurofins_metadata
 from src.extraction.filters import is_chemical_row, CA_SKIP_ROWS, FOOTER_PATTERNS
 
@@ -89,6 +90,8 @@ def ingest_file(
         fmt = detect_format(df, file_path.name)
         if fmt == 'caduceon_ca':
             chemicals = extract_ca_chemicals(df)
+        elif fmt == 'caduceon_xlsx':
+            chemicals = extract_cad_xlsx_chemicals(df)
         elif fmt == 'eurofins':
             chemicals = extract_eurofins_chemicals(df)
         else:
@@ -119,6 +122,9 @@ def ingest_file(
     if fmt == 'caduceon_ca':
         raw_chemicals = extract_ca_chemicals(df)
         layout_confidence = 0.95  # Well-understood format
+    elif fmt == 'caduceon_xlsx':
+        raw_chemicals = extract_cad_xlsx_chemicals(df)
+        layout_confidence = 0.95
     elif fmt == 'eurofins':
         raw_chemicals = extract_eurofins_chemicals(df)
         layout_confidence = 0.90
@@ -150,28 +156,44 @@ def ingest_file(
     # Match chemicals
     match_stats = {"high": 0, "medium": 0, "low": 0, "auto_accepted": 0}
     
+    # Cache resolved chemicals to avoid re-resolving the same name
+    resolve_cache = {}
+    
     with db_manager.get_session() as session:
         resolver = build_engine(session, normalizer)
         
-        for row_num, chem_raw, units, method_or_mac, result_value, sample_id in raw_chemicals:
+        for rec in raw_chemicals:
+            chem_raw = rec['chemical']
             chem_norm = normalizer.normalize(chem_raw)
             
-            result = resolver.resolve(chem_norm, confidence_threshold=0.70,
-                                      vendor=vendor)
-            
-            if result.best_match and result.best_match.confidence >= 0.70:
-                analyte_id = result.best_match.analyte_id
-                match_method = result.best_match.method
-                match_conf = result.best_match.confidence
+            # Use cache to avoid duplicate resolver calls for multi-sample rows
+            if chem_norm not in resolve_cache:
+                result = resolver.resolve(chem_norm, confidence_threshold=0.70,
+                                          vendor=vendor)
                 
-                if match_conf >= 0.95:
-                    match_stats["high"] += 1
+                if result.best_match and result.best_match.confidence >= 0.70:
+                    resolve_cache[chem_norm] = {
+                        'analyte_id': result.best_match.analyte_id,
+                        'match_method': result.best_match.method,
+                        'match_conf': result.best_match.confidence,
+                    }
                 else:
-                    match_stats["medium"] += 1
+                    resolve_cache[chem_norm] = {
+                        'analyte_id': None,
+                        'match_method': 'none',
+                        'match_conf': 0.0,
+                    }
+            
+            cached = resolve_cache[chem_norm]
+            analyte_id = cached['analyte_id']
+            match_method = cached['match_method']
+            match_conf = cached['match_conf']
+            
+            if match_conf >= 0.95:
+                match_stats["high"] += 1
+            elif match_conf >= 0.70:
+                match_stats["medium"] += 1
             else:
-                analyte_id = None
-                match_method = "none"
-                match_conf = 0.0
                 match_stats["low"] += 1
             
             # Auto-accept matches at or above threshold
@@ -184,6 +206,7 @@ def ingest_file(
                 correct_analyte = None
             
             # Extract qualifier from result value
+            result_value = rec.get('result_value', '')
             qualifier = None
             if result_value:
                 q_match = re.match(r'^([<>])', result_value)
@@ -194,16 +217,23 @@ def ingest_file(
                 INSERT INTO lab_results (
                     submission_id, row_number, chemical_raw, chemical_normalized,
                     analyte_id, correct_analyte_id, match_method, match_confidence,
-                    sample_id, result_value, units, qualifier,
-                    lab_method, validation_status, human_override,
-                    validation_notes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    sample_id, client_id, sample_date, result_value, units,
+                    qualifier, detection_limit, lab_method, chemical_group,
+                    validation_status, human_override, validation_notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                submission_id, row_num, chem_raw, chem_norm,
+                submission_id, rec['row_num'], chem_raw, chem_norm,
                 analyte_id, correct_analyte,
                 match_method, match_conf,
-                sample_id, result_value, units, qualifier,
-                method_or_mac if fmt == 'eurofins' else None,
+                rec.get('sample_id', ''),
+                rec.get('client_id', ''),
+                rec.get('sample_date', ''),
+                result_value,
+                rec.get('units', ''),
+                qualifier,
+                rec.get('detection_limit', ''),
+                rec.get('lab_method', ''),
+                rec.get('chemical_group', ''),
                 validation_status,
                 0,  # human_override = False
                 f"Auto-accepted ({match_conf:.0%} confidence)"

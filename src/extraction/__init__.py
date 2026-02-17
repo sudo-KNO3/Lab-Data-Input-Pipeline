@@ -11,20 +11,21 @@ Usage:
     rows = extract_chemicals(df, fmt)
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import pandas as pd
 
 from .detector import detect_format, detect_vendor
 from .filters import is_chemical_row, CA_SKIP_ROWS, FOOTER_PATTERNS
 from . import caduceon
+from . import caduceon_xlsx
 from . import eurofins
 from . import ocr_vendor
 
 
 def extract_chemicals(
     df: pd.DataFrame, fmt: str
-) -> List[Tuple[int, str, str, str, str, str]]:
+) -> List[Dict]:
     """
     Dispatch to the correct vendor extractor.
 
@@ -33,10 +34,14 @@ def extract_chemicals(
         fmt: Format string from ``detect_format()``.
 
     Returns:
-        List of (row_num, chem_name, units, method_or_mac, result_value, sample_id).
+        List of dicts with keys:
+            row_num, chemical, units, detection_limit, result_value,
+            sample_id, client_id, sample_date, lab_method, chemical_group
     """
     if fmt == 'caduceon_ca':
         return caduceon.extract_chemicals(df)
+    elif fmt == 'caduceon_xlsx':
+        return caduceon_xlsx.extract_chemicals(df)
     elif fmt == 'eurofins':
         return eurofins.extract_chemicals(df)
     else:
@@ -58,6 +63,8 @@ def extract_metadata(
     """
     if fmt == 'caduceon_ca':
         return caduceon.extract_metadata(df)
+    elif fmt == 'caduceon_xlsx':
+        return caduceon_xlsx.extract_metadata(df)
     elif fmt == 'eurofins':
         return eurofins.extract_metadata(df)
     else:
@@ -71,6 +78,7 @@ __all__ = [
     'extract_metadata',
     'is_chemical_row',
     'caduceon',
+    'caduceon_xlsx',
     'eurofins',
     'ocr_vendor',
     'CA_SKIP_ROWS',

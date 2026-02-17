@@ -73,11 +73,14 @@ def create_schema(conn: sqlite3.Connection):
             
             -- Sample data
             sample_id TEXT,
+            client_id TEXT,
+            sample_date TEXT,
             result_value TEXT,
             units TEXT,
             qualifier TEXT,
             detection_limit TEXT,
             lab_method TEXT,
+            chemical_group TEXT,
             
             -- Validation tracking
             validation_status TEXT DEFAULT 'pending',

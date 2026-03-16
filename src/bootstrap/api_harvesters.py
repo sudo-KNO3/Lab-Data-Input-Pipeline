@@ -10,7 +10,6 @@ import time
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
-from ratelimit import limits, sleep_and_retry
 
 from .base_api import APIError, BaseAPIHarvester
 

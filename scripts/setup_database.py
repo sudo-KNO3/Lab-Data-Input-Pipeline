@@ -115,18 +115,18 @@ def load_reg153_master(db_manager: DatabaseManager, csv_path: str) -> int:
                         errors.append(f"Row {row_num}: Missing Analyte_ID or Preferred_Name")
                         continue
                     
-                    # Optional fields
-                    cas_number = row.get('CAS_Number', '').strip() or None
-                    group_code = row.get('Group_Code', '').strip() or None
-                    chemical_group = row.get('Chemical_Group', '').strip() or None
-                    smiles = row.get('SMILES', '').strip() or None
-                    inchi_key = row.get('InChI_Key', '').strip() or None
-                    molecular_formula = row.get('Molecular_Formula', '').strip() or None
-                    parent_analyte_id = row.get('Parent_Analyte_ID', '').strip() or None
-                    
+                    # Optional fields — coerce None (missing CSV columns) to '' before strip
+                    cas_number = (row.get('CAS_Number') or '').strip() or None
+                    group_code = (row.get('Group_Code') or '').strip() or None
+                    chemical_group = (row.get('Chemical_Group') or '').strip() or None
+                    smiles = (row.get('SMILES') or '').strip() or None
+                    inchi_key = (row.get('InChI_Key') or '').strip() or None
+                    molecular_formula = (row.get('Molecular_Formula') or '').strip() or None
+                    parent_analyte_id = (row.get('Parent_Analyte_ID') or '').strip() or None
+
                     # Parse table number
                     table_number = None
-                    table_num_str = row.get('Table_Number', '').strip()
+                    table_num_str = (row.get('Table_Number') or '').strip()
                     if table_num_str:
                         try:
                             table_number = int(table_num_str)

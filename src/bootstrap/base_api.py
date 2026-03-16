@@ -11,7 +11,6 @@ from typing import Any, Callable, Dict, List, Optional
 import requests
 import requests_cache
 from loguru import logger
-from ratelimit import limits, sleep_and_retry
 
 
 class APIError(Exception):

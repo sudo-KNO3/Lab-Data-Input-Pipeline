@@ -55,7 +55,7 @@ class TextNormalizer:
         r'\bdelta\b': 'δ',
         r'\bepsilon\b': 'ε',
         r'\bzeta\b': 'ζ',
-        r'\beta\b': 'η',
+        '\\beta\\b': 'η',  # \\b + eta + \\b (word-boundary + "eta" + word-boundary)
         r'\btheta\b': 'θ',
         r'\biota\b': 'ι',
         r'\bkappa\b': 'κ',

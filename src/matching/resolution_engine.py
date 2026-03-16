@@ -480,9 +480,9 @@ class ResolutionEngine:
         if top_match.analyte_id == second_match.analyte_id:
             return False
         
-        # Check if scores are close (within 0.05)
+        # Check if scores are close (within margin threshold)
         score_diff = abs(top_match.score - second_match.score)
-        if score_diff < 0.05:
+        if score_diff < self.MARGIN_THRESHOLD:
             return True
         
         return False
@@ -561,7 +561,7 @@ class ResolutionEngine:
         decayed_conf = raw_conf * decay_factor
         
         # Determine method based on staleness
-        is_stale = decay_factor < 1.0 and decayed_conf < 0.93  # below AUTO_ACCEPT
+        is_stale = decay_factor < 1.0 and decayed_conf < self.AUTO_ACCEPT
         method = 'vendor_cache_stale' if is_stale else 'vendor_cache'
         
         # Resolve analyte name

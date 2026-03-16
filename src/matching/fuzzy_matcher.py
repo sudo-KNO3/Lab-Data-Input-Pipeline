@@ -6,6 +6,7 @@ returning ranked candidates with confidence scores.
 """
 
 from typing import List, Tuple, Optional
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 import Levenshtein
 
@@ -64,44 +65,45 @@ class FuzzyMatcher:
         if not normalized_input:
             return []
         
-        # Get all synonyms from database
-        synonyms = db_session.query(Synonym).all()
-        
-        # Calculate similarities
-        matches: List[Tuple[float, Synonym, bool]] = []
-        for synonym in synonyms:
+        # Single JOIN query: fetch synonyms + their analytes in one round trip.
+        # A length-based SQL pre-filter reduces the candidate pool before
+        # Python-level Levenshtein scoring. For very short inputs (<=3 chars)
+        # the filter is skipped to avoid over-pruning abbreviations.
+        n = len(normalized_input)
+        stmt = select(Synonym, Analyte).join(Analyte, Synonym.analyte_id == Analyte.analyte_id)
+        if n > 3:
+            # Conservative bounds: a Levenshtein ratio >= threshold requires
+            # |len_a - len_b| <= (1 - threshold) * (len_a + len_b) / threshold.
+            # Using ±20% slack prevents false exclusions near the boundary.
+            min_len = max(1, int(n * threshold * 0.80))
+            max_len = int(n / threshold * 1.20) + 1
+            stmt = stmt.where(func.length(Synonym.synonym_norm).between(min_len, max_len))
+
+        rows = db_session.execute(stmt).all()
+
+        # Score candidates and filter by threshold
+        matches: List[Tuple[float, Synonym, Analyte, bool]] = []
+        for synonym, analyte in rows:
             similarity = self._calculate_similarity(normalized_input, synonym.synonym_norm)
-            
+
             # Vendor tiebreak: boost synonyms from the same lab vendor
             vendor_match = False
             if vendor and vendor_boost > 0.0 and hasattr(synonym, 'lab_vendor'):
                 if synonym.lab_vendor and synonym.lab_vendor == vendor:
                     similarity = min(similarity + vendor_boost, 1.0)
                     vendor_match = True
-            
+
             if similarity >= threshold:
-                matches.append((similarity, synonym, vendor_match))
-        
-        # Sort by similarity (descending)
+                matches.append((similarity, synonym, analyte, vendor_match))
+
+        # Sort by similarity (descending), take top-K
         matches.sort(key=lambda x: x[0], reverse=True)
-        
-        # Take top-K
         matches = matches[:top_k]
-        
-        # Build MatchResult objects
+
+        # Build MatchResult objects (analyte already loaded from JOIN — no extra queries)
         results = []
-        for similarity, synonym, vendor_match in matches:
-            # Get analyte
-            analyte = db_session.query(Analyte).filter(
-                Analyte.analyte_id == synonym.analyte_id
-            ).first()
-            
-            if not analyte:
-                continue
-            
-            # Map similarity to confidence
+        for similarity, synonym, analyte, vendor_match in matches:
             confidence = self._map_confidence(similarity)
-            
             result = MatchResult(
                 analyte_id=analyte.analyte_id,
                 preferred_name=analyte.preferred_name,
@@ -118,7 +120,7 @@ class FuzzyMatcher:
                 }
             )
             results.append(result)
-        
+
         return results
     
     def _calculate_similarity(self, text1: str, text2: str) -> float:

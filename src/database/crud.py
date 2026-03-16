@@ -292,7 +292,7 @@ def bulk_insert_synonyms(
 
 def synonym_exists(
     session: Session,
-    analyte_id: int,
+    analyte_id: str,
     synonym_norm: str
 ) -> bool:
     """
@@ -320,7 +320,7 @@ def synonym_exists(
 
 def get_synonyms_for_analyte(
     session: Session,
-    analyte_id: int,
+    analyte_id: str,
     min_confidence: float = 0.0
 ) -> List[Synonym]:
     """
@@ -377,7 +377,7 @@ def search_synonyms(
 def delete_synonyms_by_source(
     session: Session,
     harvest_source: str,
-    analyte_id: Optional[int] = None
+    analyte_id: Optional[str] = None
 ) -> int:
     """
     Delete synonyms by harvest source.
@@ -527,7 +527,7 @@ def get_or_create_lab_variant(
     session: Session,
     lab_vendor: str,
     observed_text: str,
-    validated_match_id: Optional[int] = None,
+    validated_match_id: Optional[str] = None,
     confidence: Optional[float] = None,
 ) -> Tuple[LabVariant, bool]:
     """
@@ -566,7 +566,7 @@ def create_lab_variant_confirmation(
     session: Session,
     variant_id: int,
     submission_id: str,
-    confirmed_analyte_id: int,
+    confirmed_analyte_id: str,
 ) -> Optional[LabVariantConfirmation]:
     """
     Record a confirmation for a lab variant from a specific submission.
@@ -776,9 +776,9 @@ def get_decisions_for_review(
         stmt = stmt.where(MatchDecision.disagreement_flag == True)
     
     if not_reviewed:
-        stmt = stmt.where(MatchDecision.manual_review == False)
-    
-    stmt = stmt.order_by(desc(MatchDecision.created_at)).limit(limit)
+        stmt = stmt.where(MatchDecision.human_validated == False)
+
+    stmt = stmt.order_by(desc(MatchDecision.decision_timestamp)).limit(limit)
     return session.execute(stmt).scalars().all()
 
 
@@ -804,9 +804,8 @@ def mark_decision_reviewed(
     if not decision:
         return None
     
-    decision.manual_review = True
-    decision.reviewed_by = reviewed_by
-    decision.review_notes = review_notes
+    decision.human_validated = True
+    decision.validation_notes = review_notes
     session.flush()
     return decision
 
@@ -847,7 +846,7 @@ def get_match_statistics(
     total = len(decisions)
     avg_conf = sum(d.confidence_score for d in decisions) / total
     disagreements = sum(1 for d in decisions if d.disagreement_flag)
-    reviewed = sum(1 for d in decisions if d.manual_review)
+    reviewed = sum(1 for d in decisions if d.human_validated)
     
     return {
         "total_decisions": total,

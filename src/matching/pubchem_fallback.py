@@ -22,6 +22,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict, Tuple
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.database.models import Synonym, Analyte
@@ -117,11 +118,16 @@ class PubChemFallback:
             time.sleep(MIN_REQUEST_INTERVAL - elapsed)
         self._last_request_time = time.time()
     
-    def _pubchem_get(self, url: str) -> Optional[Dict]:
+    def _pubchem_get(self, url: str) -> Tuple[Optional[Dict], str]:
         """
         Make a GET request to PubChem with rate limiting.
-        
-        Returns parsed JSON or None on error/not-found.
+
+        Returns (data, status) where status is one of:
+          'ok'           - success, data is populated
+          'not_found'    - 404, compound not in PubChem
+          'rate_limited' - 429/503, should not cache
+          'api_error'    - other HTTP error, should not cache
+          'timeout'      - network/timeout error, should not cache
         """
         self._rate_limit()
         try:
@@ -129,23 +135,29 @@ class PubChemFallback:
                 'User-Agent': 'Reg153-ChemMatcher/2.0 (automated-ingestion)'
             })
             with urllib.request.urlopen(req, timeout=15) as resp:
-                return json.loads(resp.read())
+                return json.loads(resp.read()), 'ok'
         except urllib.error.HTTPError as e:
             if e.code == 404:
                 logger.debug(f"PubChem 404: {url}")
-                return None
+                return None, 'not_found'
+            if e.code in (429, 503):
+                logger.warning(f"PubChem rate limited ({e.code}): {url}")
+                return None, 'rate_limited'
             logger.warning(f"PubChem HTTP error {e.code}: {url}")
-            return None
+            return None, 'api_error'
+        except urllib.error.URLError as e:
+            logger.warning(f"PubChem network error: {e}")
+            return None, 'timeout'
         except Exception as e:
             logger.warning(f"PubChem request failed: {e}")
-            return None
+            return None, 'api_error'
     
-    def _search_pubchem(self, name: str) -> Optional[Dict]:
+    def _search_pubchem(self, name: str) -> Tuple[Optional[Dict], str]:
         """
         Search PubChem for a chemical name.
-        
-        Returns dict with CID, IUPAC name, CAS numbers, and synonyms,
-        or None if not found.
+
+        Returns (data, status) where status matches _pubchem_get status values.
+        data is a dict with CID, IUPAC name, CAS numbers, and synonyms, or None.
         """
         # Step 1: Get CID and basic properties
         encoded = urllib.parse.quote(name)
@@ -153,19 +165,19 @@ class PubChemFallback:
             f'{PUBCHEM_BASE}/compound/name/{encoded}'
             f'/property/IUPACName,MolecularFormula,MolecularWeight/JSON'
         )
-        prop_data = self._pubchem_get(prop_url)
-        if not prop_data:
-            return None
-        
+        prop_data, prop_status = self._pubchem_get(prop_url)
+        if prop_data is None:
+            return None, prop_status
+
         try:
             props = prop_data['PropertyTable']['Properties'][0]
             cid = props['CID']
         except (KeyError, IndexError):
-            return None
-        
+            return None, 'not_found'
+
         # Step 2: Get synonyms (includes CAS numbers)
         syn_url = f'{PUBCHEM_BASE}/compound/cid/{cid}/synonyms/JSON'
-        syn_data = self._pubchem_get(syn_url)
+        syn_data, _ = self._pubchem_get(syn_url)
         
         synonyms = []
         cas_numbers = []
@@ -198,7 +210,7 @@ class PubChemFallback:
             'cas_numbers': cas_numbers,
             'synonyms': synonyms,
             'queried_at': datetime.now().isoformat(),
-        }
+        }, 'ok'
     
     # ── CAS cross-reference ───────────────────────────────────────────
     
@@ -211,21 +223,21 @@ class PubChemFallback:
         """
         for cas in cas_numbers:
             # Check analytes table
-            analyte = self.db_session.query(Analyte).filter(
-                Analyte.cas_number == cas
-            ).first()
+            analyte = self.db_session.execute(
+                select(Analyte).where(Analyte.cas_number == cas)
+            ).scalar_one_or_none()
             if analyte:
                 logger.info(f"PubChem CAS cross-ref: {cas} → {analyte.preferred_name}")
                 return analyte
-            
+
             # Check synonyms table for CAS stored as synonym
-            syn = self.db_session.query(Synonym).filter(
-                Synonym.synonym_raw == cas
-            ).first()
+            syn = self.db_session.execute(
+                select(Synonym).where(Synonym.synonym_raw == cas)
+            ).scalar_one_or_none()
             if syn:
-                analyte = self.db_session.query(Analyte).filter(
-                    Analyte.analyte_id == syn.analyte_id
-                ).first()
+                analyte = self.db_session.execute(
+                    select(Analyte).where(Analyte.analyte_id == syn.analyte_id)
+                ).scalar_one_or_none()
                 if analyte:
                     logger.info(f"PubChem CAS synonym cross-ref: {cas} → {analyte.preferred_name}")
                     return analyte
@@ -245,10 +257,12 @@ class PubChemFallback:
             return False
         
         # Check if this normalized form already exists for this analyte
-        existing = self.db_session.query(Synonym).filter(
-            Synonym.analyte_id == analyte_id,
-            Synonym.synonym_norm == normalized
-        ).first()
+        existing = self.db_session.execute(
+            select(Synonym).where(
+                Synonym.analyte_id == analyte_id,
+                Synonym.synonym_norm == normalized
+            )
+        ).scalar_one_or_none()
         
         if existing:
             return False
@@ -335,9 +349,9 @@ class PubChemFallback:
             
             # If previously matched, try to return the match
             if cached.get('matched_analyte_id'):
-                analyte = self.db_session.query(Analyte).filter(
-                    Analyte.analyte_id == cached['matched_analyte_id']
-                ).first()
+                analyte = self.db_session.execute(
+                    select(Analyte).where(Analyte.analyte_id == cached['matched_analyte_id'])
+                ).scalar_one_or_none()
                 if analyte:
                     metadata['pubchem_status'] = 'cache_hit_matched'
                     return MatchResult(
@@ -357,17 +371,22 @@ class PubChemFallback:
         
         # ── Query PubChem API ──────────────────────────────────────
         logger.info(f"PubChem lookup: '{input_text}'")
-        pubchem_data = self._search_pubchem(input_text)
-        
+        pubchem_data, api_status = self._search_pubchem(input_text)
+
         if pubchem_data is None:
-            # Not found on PubChem — cache the miss
-            self._cache[cache_key] = {
-                'query': input_text,
-                'found': False,
-                'queried_at': datetime.now().isoformat(),
-            }
-            self._save_cache()
-            metadata['pubchem_status'] = 'api_not_found'
+            if api_status == 'not_found':
+                # Compound definitively not in PubChem — safe to cache permanently
+                self._cache[cache_key] = {
+                    'query': input_text,
+                    'found': False,
+                    'queried_at': datetime.now().isoformat(),
+                }
+                self._save_cache()
+                metadata['pubchem_status'] = 'api_not_found'
+            else:
+                # Transient error (rate limit, timeout, network) — do NOT cache
+                logger.warning(f"PubChem transient error ({api_status}) for '{input_text}' — not caching")
+                metadata['pubchem_status'] = f'api_error_{api_status}'
             return None, metadata
         
         # ── Cross-reference CAS ────────────────────────────────────

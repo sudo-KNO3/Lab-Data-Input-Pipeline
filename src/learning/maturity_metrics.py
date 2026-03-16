@@ -74,7 +74,7 @@ def calculate_corpus_maturity(
     # === Overall Statistics ===
     
     # Total counts
-    total_analytes = session.execute(select(func.count(Analyte.id))).scalar_one()
+    total_analytes = session.execute(select(func.count(Analyte.analyte_id))).scalar_one()
     total_synonyms = session.execute(select(func.count(Synonym.id))).scalar_one()
     
     avg_synonyms_per_analyte = total_synonyms / total_analytes if total_analytes > 0 else 0.0
@@ -82,7 +82,7 @@ def calculate_corpus_maturity(
     # Match method distribution (last 30 days)
     cutoff_30d = now - timedelta(days=30)
     recent_decisions = session.execute(
-        select(MatchDecision).where(MatchDecision.created_at >= cutoff_30d)
+        select(MatchDecision).where(MatchDecision.decision_timestamp >= cutoff_30d)
     ).scalars().all()
     
     if recent_decisions:
@@ -99,7 +99,7 @@ def calculate_corpus_maturity(
             1 for d in recent_decisions
             if d.signals_used.get('semantic_score', 0) > 0
         )
-        unknown_count = sum(1 for d in recent_decisions if d.analyte_id is None)
+        unknown_count = sum(1 for d in recent_decisions if d.matched_analyte_id is None)
         
         total = len(recent_decisions)
         exact_match_rate = exact_count / total if total > 0 else 0.0
@@ -129,15 +129,15 @@ def calculate_corpus_maturity(
         week_decisions = session.execute(
             select(MatchDecision).where(
                 and_(
-                    MatchDecision.created_at >= week_start,
-                    MatchDecision.created_at < week_end
+                    MatchDecision.decision_timestamp >= week_start,
+                    MatchDecision.decision_timestamp < week_end
                 )
             )
         ).scalars().all()
         
         if week_decisions:
             exact = sum(1 for d in week_decisions if d.signals_used.get('exact_match', False))
-            unknown = sum(1 for d in week_decisions if d.analyte_id is None)
+            unknown = sum(1 for d in week_decisions if d.matched_analyte_id is None)
             total = len(week_decisions)
             
             exact_match_trend.append(exact / total if total > 0 else 0.0)

@@ -42,6 +42,24 @@ FOOTER_PATTERNS = [
 ]
 
 
+def infer_medium_from_units(units: str) -> str:
+    """Infer sample medium from units string.
+
+    Returns 'Soil' for mass-per-mass units (ug/g, mg/kg, etc.),
+    'Water' for mass-per-volume units (mg/L, ug/L, etc.),
+    or '' if undetermined.
+    """
+    u = units.lower().strip()
+    if not u:
+        return ''
+    if any(kw in u for kw in ['ug/g', 'mg/kg', 'ug/kg', 'ng/g', 'ppm']):
+        return 'Soil'
+    if any(kw in u for kw in ['mg/l', 'ug/l', 'ng/l', 'cfu/100ml',
+                               'mpn/100ml', 'us/cm', 'ntu']):
+        return 'Water'
+    return ''
+
+
 def is_chemical_row(chem_name: str, fmt: str) -> bool:
     """
     Determine whether a row contains a valid chemical name.

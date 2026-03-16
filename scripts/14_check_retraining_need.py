@@ -248,6 +248,52 @@ def check_low_confidence_prevalence_trigger(session: Session, days: int = 30) ->
     return trigger_met, details
 
 
+def check_ood_rate_trigger(session: Session, days: int = 30) -> Tuple[bool, Dict]:
+    """
+    Check if out-of-distribution (OOD) rate is high.
+
+    Trigger: > 15% of recent decisions have no match AND confidence < 0.50,
+    indicating inputs that are structurally different from the training distribution.
+
+    Args:
+        session: Database session
+        days: Number of days to analyze
+
+    Returns:
+        Tuple of (trigger_met, details_dict)
+    """
+    logger.info("Checking OOD rate trigger...")
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    recent = session.execute(
+        select(MatchDecision).where(MatchDecision.decision_timestamp >= cutoff)
+    ).scalars().all()
+
+    if not recent:
+        return False, {'trigger_met': False, 'reason': 'No recent decisions'}
+
+    ood_count = sum(
+        1 for d in recent
+        if d.matched_analyte_id is None and d.confidence_score < 0.50
+    )
+    ood_rate = ood_count / len(recent)
+    threshold = 0.15
+
+    trigger_met = ood_rate > threshold
+
+    details = {
+        'ood_count': ood_count,
+        'total_decisions': len(recent),
+        'ood_rate': ood_rate,
+        'threshold': threshold,
+        'trigger_met': trigger_met
+    }
+
+    logger.info(f"OOD rate: {ood_rate*100:.1f}% ({ood_count}/{len(recent)})")
+
+    return trigger_met, details
+
+
 def assess_retraining_need(session: Session) -> Dict:
     """
     Comprehensive retraining need assessment.
@@ -278,21 +324,24 @@ def assess_retraining_need(session: Session) -> Dict:
     
     trigger_met, details = check_low_confidence_prevalence_trigger(session)
     triggers['low_confidence_prevalence'] = details
-    
+
+    trigger_met, details = check_ood_rate_trigger(session)
+    triggers['ood_rate'] = details
+
     # Count how many triggers are met
     triggers_met = sum(1 for t in triggers.values() if t.get('trigger_met', False))
-    
+
     # Determine recommendation
     if triggers_met >= 2:
         recommendation = "RECOMMENDED"
-        reasoning = f"{triggers_met} out of 4 retraining triggers are met. Neural model retraining is recommended."
+        reasoning = f"{triggers_met} out of 5 retraining triggers are met. Neural model retraining is recommended."
     elif triggers_met == 1:
         recommendation = "CONSIDER"
-        reasoning = f"1 out of 4 retraining triggers is met. Consider retraining if manual validation load is high."
+        reasoning = f"1 out of 5 retraining triggers is met. Consider retraining if manual validation load is high."
     else:
         recommendation = "NOT NEEDED"
         reasoning = "No significant triggers met. Continue with current model and corpus expansion."
-    
+
     # Prepare assessment
     assessment = {
         'timestamp': datetime.utcnow(),
@@ -301,8 +350,8 @@ def assess_retraining_need(session: Session) -> Dict:
         'recommendation': recommendation,
         'reasoning': reasoning
     }
-    
-    logger.info(f"Triggers met: {triggers_met}/4")
+
+    logger.info(f"Triggers met: {triggers_met}/5")
     logger.info(f"Recommendation: {recommendation}")
     
     return assessment
@@ -355,11 +404,15 @@ Assessment Date: {assessment['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}
 │      Low confidence rate: {triggers['low_confidence_prevalence']['low_confidence_rate']*100:>7.1f}%                               │
 │      Threshold:           {triggers['low_confidence_prevalence']['threshold']*100:>7.1f}%                               │
 │                                                                          │
+│  [{'✅' if triggers['ood_rate']['trigger_met'] else '❌'}] Trigger 5: Out-of-Distribution Rate                               │
+│      OOD rate:            {triggers['ood_rate']['ood_rate']*100:>7.1f}%                               │
+│      Threshold:           {triggers['ood_rate']['threshold']*100:>7.1f}%                               │
+│                                                                          │
 └──────────────────────────────────────────────────────────────────────────┘
 
 ┌─ SUMMARY ────────────────────────────────────────────────────────────────┐
 │                                                                          │
-│  Triggers Met:  {assessment['triggers_met_count']}/4                                                      │
+│  Triggers Met:  {assessment['triggers_met_count']}/5                                                      │
 │                                                                          │
 │  Required:      ≥ 2 triggers for retraining recommendation              │
 │                                                                          │

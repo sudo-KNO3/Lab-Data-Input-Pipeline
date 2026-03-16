@@ -50,6 +50,18 @@ def calculate_file_hash(file_path: Path) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _extract_for_format(df: pd.DataFrame, fmt: str) -> Tuple[list, float]:
+    """Dispatch extraction and return (chemicals, layout_confidence) for a given format."""
+    if fmt == 'caduceon_ca':
+        return extract_ca_chemicals(df), 0.95
+    elif fmt == 'caduceon_xlsx':
+        return extract_cad_xlsx_chemicals(df), 0.95
+    elif fmt == 'eurofins':
+        return extract_eurofins_chemicals(df), 0.90
+    else:
+        return [], 0.50
+
+
 def ingest_file(
     file_path: Path,
     lab_db_path: str,
@@ -88,14 +100,7 @@ def ingest_file(
         # Just detect format and count chemicals
         df = pd.read_excel(file_path, sheet_name=0, header=None)
         fmt = detect_format(df, file_path.name)
-        if fmt == 'caduceon_ca':
-            chemicals = extract_ca_chemicals(df)
-        elif fmt == 'caduceon_xlsx':
-            chemicals = extract_cad_xlsx_chemicals(df)
-        elif fmt == 'eurofins':
-            chemicals = extract_eurofins_chemicals(df)
-        else:
-            chemicals = []
+        chemicals, _ = _extract_for_format(df, fmt)
         return (-1, len(chemicals), 0, 0.0)
     
     # Archive
@@ -119,19 +124,7 @@ def ingest_file(
         vendor = detect_vendor(file_path, df=df)
     
     # Extract chemicals based on format
-    if fmt == 'caduceon_ca':
-        raw_chemicals = extract_ca_chemicals(df)
-        layout_confidence = 0.95  # Well-understood format
-    elif fmt == 'caduceon_xlsx':
-        raw_chemicals = extract_cad_xlsx_chemicals(df)
-        layout_confidence = 0.95
-    elif fmt == 'eurofins':
-        raw_chemicals = extract_eurofins_chemicals(df)
-        layout_confidence = 0.90
-    else:
-        # Fallback to generic extraction
-        raw_chemicals = []
-        layout_confidence = 0.50
+    raw_chemicals, layout_confidence = _extract_for_format(df, fmt)
     
     if not raw_chemicals:
         lab_conn.close()

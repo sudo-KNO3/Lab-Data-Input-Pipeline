@@ -18,27 +18,7 @@ from typing import Dict, List, Tuple
 
 import pandas as pd
 
-from .filters import is_chemical_row
-
-
-def _infer_medium_from_units(units: str) -> str:
-    """Infer sample medium from units string.
-
-    Returns 'Soil' for mass-per-mass units (ug/g, mg/kg, etc.),
-    'Water' for mass-per-volume units (mg/L, ug/L, etc.),
-    or '' if undetermined.
-    """
-    u = units.lower().strip()
-    if not u:
-        return ''
-    # Soil indicators (mass/mass)
-    if any(kw in u for kw in ['ug/g', 'mg/kg', 'ug/kg', 'ng/g', 'ppm']):
-        return 'Soil'
-    # Water indicators (mass/volume or volume-based)
-    if any(kw in u for kw in ['mg/l', 'ug/l', 'ng/l', 'cfu/100ml',
-                               'mpn/100ml', 'us/cm', 'ntu']):
-        return 'Water'
-    return ''
+from .filters import is_chemical_row, infer_medium_from_units
 
 
 def extract_metadata(df: pd.DataFrame) -> Dict[str, str]:
@@ -149,7 +129,7 @@ def extract_chemicals(
                 'sample_date': si['sample_date'],
                 'lab_method': '',
                 'chemical_group': '',
-                'medium': _infer_medium_from_units(units),
+                'medium': infer_medium_from_units(units),
             })
 
         # Fallback: no sample columns found
@@ -165,7 +145,7 @@ def extract_chemicals(
                 'sample_date': '',
                 'lab_method': '',
                 'chemical_group': '',
-                'medium': _infer_medium_from_units(units),
+                'medium': infer_medium_from_units(units),
             })
 
     return chemicals

@@ -6,9 +6,11 @@ thresholds based on observed precision and recall.
 """
 
 import logging
-from typing import Any, List, Optional
+import yaml
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
@@ -359,3 +361,92 @@ class ThresholdCalibrator:
             'ingested_count': 0,
             'ingestion_rate': 0
         }
+
+
+# ============================================================================
+# Module-level wrappers for script compatibility
+# ============================================================================
+
+def analyze_match_decisions(session: Session, days_back: int = 30) -> Dict[str, Any]:
+    """
+    Analyze recent match decisions and return stats in the format expected by
+    scripts/10_monthly_calibration.py.
+    """
+    calibrator = ThresholdCalibrator()
+    stats = calibrator.analyze_recent_decisions(session, days=days_back)
+    total = stats['total_decisions']
+    return {
+        'total_decisions': total,
+        'acceptance_rate_top1': stats.get('acceptance_rate_top1') or 0.0,
+        'override_frequency': stats.get('override_frequency') or 0.0,
+        'disagreement_frequency': stats.get('override_frequency') or 0.0,
+        'unknown_rate': stats.get('unknown_rate') or 0.0,
+        'method_distribution': {
+            method: (count / total if total > 0 else 0.0)
+            for method, count in stats.get('method_distribution', {}).items()
+        },
+        'decisions_by_confidence': stats.get('confidence_distribution', {}),
+    }
+
+
+def recalibrate_thresholds(
+    session: Session,
+    days_back: int = 30,
+    target_precision: float = 0.98
+) -> Dict[str, Any]:
+    """
+    Recalibrate thresholds from recent decisions. Returns result dict with
+    keys: success, message, recommended_thresholds, method_sample_sizes.
+    """
+    cutoff = datetime.utcnow() - timedelta(days=days_back)
+    decisions = session.execute(
+        select(MatchDecision).where(MatchDecision.decision_timestamp >= cutoff)
+    ).scalars().all()
+
+    if len(decisions) < 100:
+        return {
+            'success': False,
+            'message': f'Insufficient data: {len(decisions)} decisions (need ≥100)',
+            'recommended_thresholds': {},
+            'method_sample_sizes': {},
+        }
+
+    calibrator = ThresholdCalibrator()
+    optimal = calibrator.calculate_optimal_thresholds(decisions, target_precision=target_precision)
+
+    method_counts: Dict[str, int] = {}
+    for d in decisions:
+        method_counts[d.match_method] = method_counts.get(d.match_method, 0) + 1
+
+    return {
+        'success': True,
+        'message': f'Calibrated on {len(decisions)} decisions over last {days_back} days',
+        'recommended_thresholds': optimal,
+        'method_sample_sizes': method_counts,
+    }
+
+
+def update_config_thresholds(config_path: str, new_thresholds: Dict[str, float]) -> bool:
+    """
+    Update threshold values in a YAML config file.
+
+    Only keys present in new_thresholds AND recognized threshold names
+    (auto_accept, review, disagreement_cap) are written.
+    """
+    path = Path(config_path)
+    try:
+        cfg: dict = {}
+        if path.exists():
+            with open(path, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f) or {}
+        cfg.setdefault('thresholds', {}).update({
+            k: v for k, v in new_thresholds.items()
+            if k in ('auto_accept', 'review', 'disagreement_cap', 'margin_threshold')
+        })
+        with open(path, 'w', encoding='utf-8') as f:
+            yaml.safe_dump(cfg, f, default_flow_style=False)
+        logger.info(f"Updated thresholds in {config_path}: {new_thresholds}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update config {config_path}: {e}")
+        return False

@@ -6,6 +6,7 @@ returning matches with 1.0 confidence when found.
 """
 
 from typing import Optional, Any
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.database.models import Synonym, Analyte
@@ -114,17 +115,17 @@ class ExactMatcher:
             return None
         
         # Query synonyms table for exact normalized match
-        synonym = db_session.query(Synonym).filter(
-            Synonym.synonym_norm == normalized
-        ).first()
-        
+        synonym = db_session.execute(
+            select(Synonym).where(Synonym.synonym_norm == normalized)
+        ).scalar_one_or_none()
+
         if not synonym:
             return None
-        
+
         # Get the analyte
-        analyte = db_session.query(Analyte).filter(
-            Analyte.analyte_id == synonym.analyte_id
-        ).first()
+        analyte = db_session.execute(
+            select(Analyte).where(Analyte.analyte_id == synonym.analyte_id)
+        ).scalar_one_or_none()
         
         if not analyte:
             return None

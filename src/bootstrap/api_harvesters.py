@@ -473,32 +473,91 @@ class NPRIHarvester(BaseAPIHarvester):
 
     def _load_substance_list(self):
         """
-        Load NPRI substance list.
-        
-        Note: In production, this would download and cache the substance CSV.
-        For now, we'll implement a basic stub.
+        Download and parse the NPRI substance list CSV from ECCC's open data portal.
+
+        Builds a CAS-indexed dict mapping CAS numbers to English/French name lists.
+        The CSV is cached by requests_cache so subsequent runs avoid re-downloading.
+        Falls back to an empty cache on any error so the harvester degrades gracefully.
         """
-        # TODO: Download and parse NPRI substance list CSV
-        # https://open.canada.ca/data/en/dataset/40e01423-7728-429c-ac9d-2954385ccdfb
-        logger.warning("NPRI substance list not yet implemented - using stub")
-        self._substance_cache = {}
+        import csv
+        import io
+
+        # ECCC open data download URL for the NPRI substance list
+        csv_url = (
+            "https://data-donnees.az.ec.gc.ca/api/file?path=/substances/"
+            "organize-organiser/canada-s-national-pollutant-release-inventory"
+            "--linventaire-national-des-rejets-de-polluants-du-canada/"
+            "NPRI-INRP_SubstList_ListeSubst.csv"
+        )
+
+        try:
+            response = self._make_request(csv_url)
+            if response.status_code != 200:
+                logger.warning(
+                    f"NPRI: Could not download substance list (HTTP {response.status_code})"
+                )
+                self._substance_cache = {}
+                return
+
+            reader = csv.DictReader(io.StringIO(response.text))
+            fieldnames = [f.strip() for f in (reader.fieldnames or [])]
+
+            # Flexible column detection — column headers vary across annual releases
+            cas_col = next((f for f in fieldnames if "CAS" in f.upper()), None)
+            en_col = next(
+                (f for f in fieldnames if "ENGLISH" in f.upper() or
+                 ("NAME" in f.upper() and "FRENCH" not in f.upper() and "FRAN" not in f.upper())),
+                None,
+            )
+            fr_col = next(
+                (f for f in fieldnames if "FRENCH" in f.upper() or "FRAN" in f.upper()),
+                None,
+            )
+
+            if not cas_col:
+                logger.warning(
+                    f"NPRI: Cannot identify CAS column. Available: {fieldnames[:8]}"
+                )
+                self._substance_cache = {}
+                return
+
+            self._substance_cache = {}
+            for row in reader:
+                cas = row.get(cas_col, "").strip()
+                if not cas or cas.upper() in ("N/A", "NA", ""):
+                    continue
+                names: List[str] = []
+                if en_col:
+                    n = row.get(en_col, "").strip()
+                    if n:
+                        names.append(n)
+                if fr_col:
+                    n = row.get(fr_col, "").strip()
+                    if n and n not in names:
+                        names.append(n)
+                if names:
+                    self._substance_cache[cas] = names
+
+            logger.info(f"NPRI: Loaded {len(self._substance_cache)} substances from CSV")
+
+        except Exception as exc:
+            logger.warning(f"NPRI substance list load failed ({exc}); harvester disabled")
+            self._substance_cache = {}
 
     def harvest_synonyms(self, cas_number: str, chemical_name: str) -> List[str]:
         """
-        Harvest synonyms from NPRI.
-        
-        Currently returns empty list as NPRI requires CSV parsing.
-        
+        Harvest synonyms from NPRI substance list.
+
         Args:
             cas_number: CAS registry number
-            chemical_name: Chemical name
-            
+            chemical_name: Chemical name (unused — NPRI is CAS-indexed)
+
         Returns:
-            List of synonyms (currently empty - stub)
+            List of synonyms found in the NPRI substance list
         """
-        # Stub implementation - NPRI requires CSV download
-        logger.debug("NPRI harvester is a stub - requires CSV implementation")
-        return []
+        if not cas_number or not self._substance_cache:
+            return []
+        return list(self._substance_cache.get(cas_number, []))
 
     def verify_substance(self, cas_number: str) -> bool:
         """
@@ -516,6 +575,231 @@ class NPRIHarvester(BaseAPIHarvester):
         return cas_number in self._substance_cache
 
 
+class CASCommonChemistryHarvester(BaseAPIHarvester):
+    """
+    Harvester for CAS Common Chemistry.
+
+    Free API from the American Chemical Society providing authoritative
+    chemical names and synonyms for ~500,000 common substances. CAS is the
+    primary source for definitive CAS numbers and names, so its synonyms
+    typically have high quality and authority.
+
+    API docs: https://commonchemistry.cas.org/api
+    Rate limit: 2 requests/second (conservative; no published limit)
+    """
+
+    BASE_URL = "https://commonchemistry.cas.org/api"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.last_api_call = 0.0
+
+    def get_rate_limit(self) -> tuple[int, int]:
+        """Rate limit: 2 requests per second."""
+        return (2, 1)
+
+    def _rate_limited_request(self, url: str, **kwargs):
+        """Make rate-limited request, skipping sleep for cached responses."""
+        response = self._make_request(url, **kwargs)
+        is_cached = getattr(response, "from_cache", False)
+        if not is_cached:
+            current = time.time()
+            elapsed = current - self.last_api_call
+            if elapsed < 0.5 and self.last_api_call > 0:
+                time.sleep(0.5 - elapsed)
+            self.last_api_call = time.time()
+        return response
+
+    def harvest_synonyms(self, cas_number: str, chemical_name: str) -> List[str]:
+        """
+        Harvest synonyms from CAS Common Chemistry.
+
+        CAS Common Chemistry only supports CAS-number lookups, so this
+        harvester returns an empty list when no CAS number is provided.
+
+        Args:
+            cas_number: CAS registry number
+            chemical_name: Unused (CAS required)
+
+        Returns:
+            List of synonyms including the preferred name
+        """
+        if not cas_number:
+            return []
+
+        url = f"{self.BASE_URL}/detail?cas_rn={cas_number}"
+        try:
+            response = self._rate_limited_request(url)
+            if response.status_code == 404:
+                logger.debug(f"CAS Common Chemistry: No record for {cas_number}")
+                return []
+
+            data = self._parse_json_response(response)
+            if not data:
+                return []
+
+            synonyms: List[str] = list(data.get("synonyms", []))
+
+            # Prepend the primary/preferred name so it gets highest weight
+            name = data.get("name", "")
+            if name and name not in synonyms:
+                synonyms.insert(0, name)
+
+            logger.debug(
+                f"CAS Common Chemistry: {len(synonyms)} synonyms for {cas_number}"
+            )
+            return synonyms
+
+        except APIError as exc:
+            logger.warning(f"CAS Common Chemistry lookup failed for {cas_number}: {exc}")
+            return []
+
+
+class ChEBIHarvester(BaseAPIHarvester):
+    """
+    Harvester for ChEBI (Chemical Entities of Biological Interest).
+
+    ChEBI is a freely available database of molecular entities focused on
+    'small' chemical compounds, maintained by the European Bioinformatics
+    Institute. Particularly useful for biochemically relevant compounds
+    (metabolites, cofactors, lipids, vitamins).
+
+    Uses the ChEBI REST/XML web service.
+    API docs: https://www.ebi.ac.uk/webservices/chebi/
+    Rate limit: 3 requests/second (2 calls per lookup: search + get entity)
+    """
+
+    BASE_URL = "https://www.ebi.ac.uk/webservices/chebi/2.0/test"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.last_api_call = 0.0
+
+    def get_rate_limit(self) -> tuple[int, int]:
+        """Rate limit: 3 requests per second."""
+        return (3, 1)
+
+    def _rate_limited_request(self, url: str, **kwargs):
+        """Make rate-limited request, skipping sleep for cached responses."""
+        response = self._make_request(url, **kwargs)
+        is_cached = getattr(response, "from_cache", False)
+        if not is_cached:
+            current = time.time()
+            elapsed = current - self.last_api_call
+            if elapsed < 0.34 and self.last_api_call > 0:
+                time.sleep(0.34 - elapsed)
+            self.last_api_call = time.time()
+        return response
+
+    def harvest_synonyms(self, cas_number: str, chemical_name: str) -> List[str]:
+        """
+        Harvest synonyms from ChEBI.
+
+        Searches by CAS number first, falling back to chemical name. Returns
+        synonyms from the top ChEBI match only to avoid cross-compound pollution.
+
+        Args:
+            cas_number: CAS registry number
+            chemical_name: Chemical name (fallback)
+
+        Returns:
+            List of synonyms from ChEBI
+        """
+        identifier = cas_number or chemical_name
+        if not identifier:
+            return []
+
+        try:
+            chebi_ids = self._search_chebi(identifier)
+            if not chebi_ids:
+                logger.debug(f"ChEBI: No match for {identifier}")
+                return []
+
+            synonyms = self._get_synonyms(chebi_ids[0])
+            logger.debug(
+                f"ChEBI: {len(synonyms)} synonyms for {identifier} ({chebi_ids[0]})"
+            )
+            return synonyms
+
+        except Exception as exc:
+            logger.warning(f"ChEBI lookup failed for {identifier}: {exc}")
+            return []
+
+    def _search_chebi(self, query: str) -> List[str]:
+        """Search ChEBI and return a list of ChEBI IDs for the top matches."""
+        import xml.etree.ElementTree as ET
+
+        response = self._rate_limited_request(
+            f"{self.BASE_URL}/getLiteEntity",
+            params={
+                "search": query,
+                "searchCategory": "ALL",
+                "maximumResults": "5",
+                "stars": "ALL",
+            },
+        )
+        if response.status_code != 200:
+            return []
+
+        try:
+            root = ET.fromstring(response.text)
+            # Use local-name matching to be namespace-agnostic
+            ids = [
+                elem.text
+                for elem in root.iter()
+                if (elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag) == "chebiId"
+                and elem.text
+            ]
+            return ids[:3]
+        except ET.ParseError as exc:
+            logger.debug(f"ChEBI XML parse error during search: {exc}")
+            return []
+
+    def _get_synonyms(self, chebi_id: str) -> List[str]:
+        """Retrieve all synonyms for a single ChEBI entity."""
+        import xml.etree.ElementTree as ET
+
+        response = self._rate_limited_request(
+            f"{self.BASE_URL}/getCompleteEntity",
+            params={"chebiId": chebi_id},
+        )
+        if response.status_code != 200:
+            return []
+
+        try:
+            root = ET.fromstring(response.text)
+            synonyms: List[str] = []
+
+            for elem in root.iter():
+                local = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+
+                # Primary ASCII name
+                if local == "chebiAsciiName" and elem.text:
+                    synonyms.append(elem.text)
+
+                # <synonyms> elements contain <data> children with synonym text
+                if local == "synonyms":
+                    for child in elem:
+                        child_local = (
+                            child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                        )
+                        if child_local == "data" and child.text:
+                            synonyms.append(child.text)
+
+            # Deduplicate while preserving order
+            seen: set = set()
+            unique: List[str] = []
+            for s in synonyms:
+                if s.lower() not in seen:
+                    seen.add(s.lower())
+                    unique.append(s)
+            return unique
+
+        except ET.ParseError as exc:
+            logger.debug(f"ChEBI XML parse error for {chebi_id}: {exc}")
+            return []
+
+
 def create_harvesters(cache_dir: Optional[str] = None) -> Dict[str, BaseAPIHarvester]:
     """
     Create all API harvesters.
@@ -530,6 +814,8 @@ def create_harvesters(cache_dir: Optional[str] = None) -> Dict[str, BaseAPIHarve
         "pubchem": PubChemHarvester(cache_dir=cache_dir),
         "nci": ChemicalResolverHarvester(cache_dir=cache_dir),
         "npri": NPRIHarvester(cache_dir=cache_dir),
+        "cas_common_chemistry": CASCommonChemistryHarvester(cache_dir=cache_dir),
+        "chebi": ChEBIHarvester(cache_dir=cache_dir),
     }
 
     logger.info(f"Initialized {len(harvesters)} API harvesters")

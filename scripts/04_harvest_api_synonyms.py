@@ -7,8 +7,10 @@ the synonyms into the database for later use in matching.
 
 APIs used:
 - PubChem (NCBI) - No authentication required
-- NCI Chemical Identifier Resolver - Free public service
-- NPRI (Canada) - Open government data
+- NCI Chemical Identifier Resolver (CACTUS) - Free public service
+- NPRI (Canada) - Open government data (CSV-based)
+- CAS Common Chemistry (ACS) - Free for non-commercial use
+- ChEBI (EBI) - Chemical Entities of Biological Interest
 
 Usage:
     python scripts/04_harvest_api_synonyms.py [--limit N] [--source SOURCE]
@@ -342,7 +344,7 @@ def main():
         "--source",
         type=str,
         default=None,
-        choices=["pubchem", "nci", "npri"],
+        choices=["pubchem", "nci", "npri", "cas_common_chemistry", "chebi"],
         help="Only harvest from specific source",
     )
     parser.add_argument(

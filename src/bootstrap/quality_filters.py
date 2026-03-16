@@ -47,6 +47,8 @@ TRADE_NAME_MARKERS = ["®", "™", "©"]
 CAS_PATTERN = re.compile(r"\b\d{1,7}-\d{2}-\d\b")
 BRACKETED_CAS_PATTERN = re.compile(r"\s*\[\s*\d{1,7}-\d{2}-\d\s*\]\s*$")
 PARENTHETICAL_INFO_PATTERN = re.compile(r"\s*\([^)]*\)\s*$")
+WHITESPACE_PATTERN = re.compile(r"\s+")
+ABBREVIATION_PATTERN = re.compile(r"^[a-zA-Z0-9\-\.']+$")
 
 
 def is_valid_ascii(text: str) -> bool:
@@ -107,8 +109,7 @@ def is_valid_abbreviation(text: str) -> bool:
         return False
 
     # Allow alphanumeric, hyphen, period, apostrophe
-    allowed_pattern = re.compile(r"^[a-zA-Z0-9\-\.']+$")
-    return bool(allowed_pattern.match(text))
+    return bool(ABBREVIATION_PATTERN.match(text))
 
 
 def clean_synonym_text(text: str) -> str:
@@ -133,7 +134,7 @@ def clean_synonym_text(text: str) -> str:
     text = PARENTHETICAL_INFO_PATTERN.sub("", text)
 
     # Normalize whitespace
-    text = re.sub(r"\s+", " ", text)
+    text = WHITESPACE_PATTERN.sub(" ", text)
 
     return text.strip()
 

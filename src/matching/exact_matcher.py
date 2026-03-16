@@ -114,21 +114,17 @@ class ExactMatcher:
         if not normalized:
             return None
         
-        # Query synonyms table for exact normalized match
-        synonym = db_session.execute(
-            select(Synonym).where(Synonym.synonym_norm == normalized)
-        ).scalar_one_or_none()
+        # Single JOIN: fetch synonym and analyte in one round trip
+        row = db_session.execute(
+            select(Synonym, Analyte)
+            .join(Analyte, Synonym.analyte_id == Analyte.analyte_id)
+            .where(Synonym.synonym_norm == normalized)
+        ).first()
 
-        if not synonym:
+        if not row:
             return None
 
-        # Get the analyte
-        analyte = db_session.execute(
-            select(Analyte).where(Analyte.analyte_id == synonym.analyte_id)
-        ).scalar_one_or_none()
-        
-        if not analyte:
-            return None
+        synonym, analyte = row
         
         # Return exact match result
         return MatchResult(

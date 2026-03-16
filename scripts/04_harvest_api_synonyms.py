@@ -18,6 +18,7 @@ Usage:
 import argparse
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import List, Set
@@ -113,12 +114,21 @@ def get_existing_synonyms(session, analyte_id: int, source: str) -> Set[str]:
     return set(results)
 
 
+def has_existing_synonyms(session, analyte_id: str) -> bool:
+    """Return True if this analyte already has any harvested synonyms."""
+    result = session.execute(
+        select(Synonym.synonym_id).where(Synonym.analyte_id == analyte_id).limit(1)
+    ).first()
+    return result is not None
+
+
 def harvest_for_analyte(
     analyte: Analyte,
     harvesters: dict,
     session,
     source_filter: str = None,
     update_cas: bool = False,
+    skip_harvested: bool = False,
 ) -> dict:
     """
     Harvest synonyms for a single analyte.
@@ -143,7 +153,14 @@ def harvest_for_analyte(
         "total_duplicate": 0,
         "errors": [],
         "cas_updated": False,
+        "skipped": False,
     }
+
+    # Skip analytes that already have synonyms when --skip-harvested is set
+    if skip_harvested and has_existing_synonyms(session, analyte.analyte_id):
+        logger.debug(f"Skipping {analyte.cas_number or analyte.preferred_name} (already harvested)")
+        stats["skipped"] = True
+        return stats
 
     # Try to fetch CAS number from PubChem if missing
     if update_cas and not analyte.cas_number and "pubchem" in harvesters:
@@ -174,8 +191,37 @@ def harvest_for_analyte(
             logger.error(f"Unknown source: {source_filter}")
             return stats
 
-    # Harvest from each source
-    for source_name, harvester in active_harvesters.items():
+    # ------------------------------------------------------------------ #
+    # Phase 1: fetch from all sources IN PARALLEL (pure HTTP, no DB I/O) #
+    # ------------------------------------------------------------------ #
+    def _timed_fetch(harvester, cas, name):
+        """Return (synonyms, duration_ms) or raise on error."""
+        t0 = time.time()
+        syns = harvester.harvest_synonyms(cas, name)
+        return syns, int((time.time() - t0) * 1000)
+
+    fetch_results: dict = {}  # source_name -> (synonyms, duration_ms) | Exception
+    with ThreadPoolExecutor(max_workers=len(active_harvesters)) as pool:
+        future_to_source = {
+            pool.submit(
+                _timed_fetch,
+                harvester,
+                analyte.cas_number,
+                analyte.preferred_name,
+            ): source_name
+            for source_name, harvester in active_harvesters.items()
+        }
+        for future in as_completed(future_to_source):
+            src = future_to_source[future]
+            try:
+                fetch_results[src] = future.result()
+            except Exception as exc:
+                fetch_results[src] = exc
+
+    # ------------------------------------------------------------------ #
+    # Phase 2: filter + insert sequentially (session is not thread-safe)  #
+    # ------------------------------------------------------------------ #
+    for source_name in active_harvesters:
         source_stats = {
             "raw_count": 0,
             "filtered_count": 0,
@@ -184,107 +230,80 @@ def harvest_for_analyte(
             "error": None,
         }
 
-        try:
-            # Get existing synonyms for this source
-            existing = get_existing_synonyms(session, analyte.analyte_id, source_name)
+        result = fetch_results.get(source_name)
 
-            # Harvest synonyms
-            start_time = time.time()
-            raw_synonyms = harvester.harvest_synonyms(
-                analyte.cas_number, analyte.preferred_name
+        if isinstance(result, Exception):
+            error_msg = f"Error harvesting from {source_name}: {result}"
+            logger.error(error_msg)
+            source_stats["error"] = str(result)
+            stats["errors"].append(error_msg)
+            record_harvest_metadata(
+                session, source_name, analyte.analyte_id, 0, 0,
+                success=False, error_message=str(result),
             )
-            duration_ms = int((time.time() - start_time) * 1000)
+            stats["by_source"][source_name] = source_stats
+            continue
 
-            source_stats["raw_count"] = len(raw_synonyms)
-            stats["total_raw"] += len(raw_synonyms)
+        raw_synonyms, duration_ms = result
+        source_stats["raw_count"] = len(raw_synonyms)
+        stats["total_raw"] += len(raw_synonyms)
 
-            if not raw_synonyms:
-                logger.debug(f"No synonyms from {source_name} for {analyte.cas_number}")
-                # Record empty harvest in metadata
-                record_harvest_metadata(
-                    session,
-                    source_name,
-                    analyte.analyte_id,
-                    0,
-                    duration_ms,
-                    success=True,
-                )
+        if not raw_synonyms:
+            logger.debug(f"No synonyms from {source_name} for {analyte.cas_number}")
+            record_harvest_metadata(
+                session, source_name, analyte.analyte_id, 0, duration_ms, success=True,
+            )
+            stats["by_source"][source_name] = source_stats
+            continue
+
+        # Apply quality filters
+        filtered_synonyms = filter_synonyms(
+            raw_synonyms,
+            analyte.analyte_type,
+            max_length=120,
+            require_ascii=True,
+        )
+        source_stats["filtered_count"] = len(filtered_synonyms)
+        stats["total_filtered"] += len(filtered_synonyms)
+
+        # Get existing synonyms for deduplication
+        existing = get_existing_synonyms(session, analyte.analyte_id, source_name)
+
+        new_count = 0
+        duplicate_count = 0
+        for synonym_text in filtered_synonyms:
+            normalized = synonym_text.lower().strip()
+            if normalized in existing:
+                duplicate_count += 1
                 continue
-
-            # Apply quality filters
-            filtered_synonyms = filter_synonyms(
-                raw_synonyms,
-                analyte.analyte_type,
-                max_length=120,
-                require_ascii=True,
-            )
-
-            source_stats["filtered_count"] = len(filtered_synonyms)
-            stats["total_filtered"] += len(filtered_synonyms)
-
-            # Insert new synonyms
-            new_count = 0
-            duplicate_count = 0
-
-            for synonym_text in filtered_synonyms:
-                # Normalize for comparison
-                normalized = synonym_text.lower().strip()
-
-                if normalized in existing:
-                    duplicate_count += 1
-                    continue
-
-                # Insert new synonym
-                synonym = Synonym(
+            session.add(
+                Synonym(
                     analyte_id=analyte.analyte_id,
                     synonym_raw=synonym_text,
                     synonym_norm=normalized,
-                    synonym_type=SynonymType.COMMON,  # API synonyms are common names
+                    synonym_type=SynonymType.COMMON,
                     harvest_source=source_name,
                     confidence=1.0,
                 )
-                session.add(synonym)
-                existing.add(normalized)
-                new_count += 1
-
-            source_stats["new_count"] = new_count
-            source_stats["duplicate_count"] = duplicate_count
-            stats["total_new"] += new_count
-            stats["total_duplicate"] += duplicate_count
-
-            # Record harvest metadata
-            record_harvest_metadata(
-                session,
-                source_name,
-                analyte.analyte_id,
-                new_count,
-                duration_ms,
-                success=True,
             )
+            existing.add(normalized)
+            new_count += 1
 
-            logger.debug(
-                f"{source_name} for {analyte.cas_number}: "
-                f"{source_stats['raw_count']} raw → "
-                f"{source_stats['filtered_count']} filtered → "
-                f"{source_stats['new_count']} new"
-            )
+        source_stats["new_count"] = new_count
+        source_stats["duplicate_count"] = duplicate_count
+        stats["total_new"] += new_count
+        stats["total_duplicate"] += duplicate_count
 
-        except Exception as e:
-            error_msg = f"Error harvesting from {source_name}: {e}"
-            logger.error(error_msg)
-            source_stats["error"] = str(e)
-            stats["errors"].append(error_msg)
+        record_harvest_metadata(
+            session, source_name, analyte.analyte_id, new_count, duration_ms, success=True,
+        )
 
-            # Record failed harvest
-            record_harvest_metadata(
-                session,
-                source_name,
-                analyte.analyte_id,
-                0,
-                0,
-                success=False,
-                error_message=str(e),
-            )
+        logger.debug(
+            f"{source_name} for {analyte.cas_number}: "
+            f"{source_stats['raw_count']} raw → "
+            f"{source_stats['filtered_count']} filtered → "
+            f"{source_stats['new_count']} new"
+        )
 
         stats["by_source"][source_name] = source_stats
 
@@ -369,6 +388,11 @@ def main():
         action="store_true",
         help="Process analytes without CAS numbers (requires --update-cas)",
     )
+    parser.add_argument(
+        "--skip-harvested",
+        action="store_true",
+        help="Skip analytes that already have synonyms in the database",
+    )
 
     args = parser.parse_args()
 
@@ -413,7 +437,11 @@ def main():
         "total_duplicate": 0,
         "total_errors": 0,
         "cas_updated_count": 0,
+        "skipped_count": 0,
     }
+
+    if args.skip_harvested:
+        logger.info("--skip-harvested: analytes with existing synonyms will be skipped")
 
     with tqdm(total=len(analytes), desc="Harvesting synonyms") as pbar:
         for i, analyte in enumerate(analytes):
@@ -427,6 +455,7 @@ def main():
                     session,
                     source_filter=args.source,
                     update_cas=args.update_cas,
+                    skip_harvested=args.skip_harvested,
                 )
 
                 overall_stats["total_raw"] += stats["total_raw"]
@@ -437,6 +466,8 @@ def main():
                 
                 if stats.get("cas_updated", False):
                     overall_stats["cas_updated_count"] += 1
+                if stats.get("skipped", False):
+                    overall_stats["skipped_count"] += 1
 
                 # Commit every 10 analytes
                 if (i + 1) % 10 == 0:
@@ -472,6 +503,8 @@ def main():
     
     if args.update_cas:
         logger.info(f"CAS numbers updated: {overall_stats['cas_updated_count']}")
+    if args.skip_harvested:
+        logger.info(f"Analytes skipped (already harvested): {overall_stats['skipped_count']}")
 
     if overall_stats["total_filtered"] > 0:
         retention_rate = (
